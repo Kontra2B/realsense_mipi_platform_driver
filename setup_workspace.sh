@@ -2,16 +2,6 @@
 
 set -e
 
-function version_lt {
-	IFS='.' read -r -a v1 <<< "$1"
-	IFS='.' read -r -a v2 <<< "$2"
-	for i in 0 1 2; do
-		[[ v1[i] -lt v2[i] ]] && return 0
-		[[ v1[i] -gt v2[i] ]] && return 1
-	done
-	return 1
-}
-
 function DisplayNvidiaLicense {
     revision=$1
 
@@ -87,7 +77,7 @@ elif [[ -f "./scripts/source_sync_$JETPACK_VERSION.sh" ]]; then
 fi
 
 # copy Makefile for jp6
-if [[ ! version_lt "$JETPACK_VERSION" 6.0 ]]; then
+if ! version_lt "$JETPACK_VERSION" 6.0; then
     cp ./nvidia-oot/Makefile "sources_$JETPACK_VERSION/"
     cp ./kernel/kernel-jammy-src/Makefile "sources_$JETPACK_VERSION/kernel"
 fi

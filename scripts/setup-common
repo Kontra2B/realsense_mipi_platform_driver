@@ -6,6 +6,16 @@ export L4T_VERSION=jetson_"${REVISION}"
 export KERNEL_DIR="kernel/kernel-5.10"
 export LICENSE=release
 
+function version_lt {
+	IFS='.' read -r -a v1 <<< "$1"
+	IFS='.' read -r -a v2 <<< "$2"
+	for i in 0 1 2; do
+		[[ v1[i] -lt v2[i] ]] && return 0
+		[[ v1[i] -gt v2[i] ]] && return 1
+	done
+	return 1
+}
+
 if [[ "$JETPACK_VERSION" =~ ^7\.0$ ]]; then
     REVISION="38.2"
     #REVISION="38.2.1"
