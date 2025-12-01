@@ -62,7 +62,7 @@ SCRIPT_NAME=`basename $0`
 # NOTE: *Add only kernel repos here. Add new repos separately below. Keep related repos together*
 # NOTE: nvethrnetrm.git should be listed after "linux-nv-oot.git" due to nesting of sync path
 SOURCE_INFO="
-k:kernel/kernel-jammy-src:nv-tegra.nvidia.com/r/3rdparty/canonical/linux-jammy.git:
+k:kernel/kernel-noble-src:nv-tegra.nvidia.com/r/3rdparty/canonical/linux-noble.git:
 k:nvgpu:nv-tegra.nvidia.com/linux-nvgpu.git:
 k:nvidia-oot:nv-tegra.nvidia.com/linux-nv-oot.git:
 k:hwpm:nv-tegra.nvidia.com/linux-hwpm.git:
