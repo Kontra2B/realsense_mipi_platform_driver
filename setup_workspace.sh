@@ -2,38 +2,36 @@
 
 set -e
 
-function DisplayNvidiaLicense {
-
-    # verify that curl is installed
-    if  ! which curl > /dev/null  ; then
-      echo "curl is not installed."
-      echo "curl can be installed by 'sudo apt-get install curl'."
-      exit 1
-    fi
-
-	local release;
-	IFS='.' read -a release <<< "$1"
-    
-    RELEASE="r${release[0]}_Release_v${release[1]}.${release[2]:-0}"
-    
-    local URL="https://developer.download.nvidia.com/embedded/L4T/${RELEASE}/$2/Tegra_Software_License_Agreement-Tegra-Linux.txt"
-
-    echo -e "\nPlease notice: This script will download the kernel source (from nv-tegra, NVIDIA's public git repository) which is subject to the following license:\n${URL}\n"
-
-	local LICENSE=$(curl -Ls ${URL})
-
-    ## display the page ##
-    echo -e "${LICENSE}\n\n"
-
-    read -t 30 -n 1 -s -r -e -p 'Press any key to continue (or wait 30 seconds..)'
-    echo
+function version_lt {
+	IFS='.' read -r -a v1 <<< "$1"
+	IFS='.' read -r -a v2 <<< "$2"
+	for i in 0 1 2; do
+		[[ v1[i] -lt v2[i] ]] && return 0
+		[[ v1[i] -gt v2[i] ]] && return 1
+	done
+	return 1
 }
 
+function DisplayNvidiaLicense {
+    revision=$1
+
+    # By default referencing license agreement of JP 5.0.2
+    license_path="https://developer.download.nvidia.com/embedded/L4T/${revision}/release/Tegra_Software_License_Agreement-Tegra-Linux.txt"
+
+    echo -e "\nPlease notice: This script will download the kernel source (from nv-tegra, NVIDIA's public git repository) which is subject to the following license:\n\n${license_path}\n"
+
+    license="$(curl -L -s ${license_path})\n\n"
+
+    ## display the page ##
+    echo -e "${license}"
+
+    read -t 30 -n 1 -s -r -e -p 'Press any key to continue (or wait 30 seconds..)'
+}
 
 if [[ "$1" == "-h" ]]; then
     echo "setup_workspace.sh [JetPack_version]"
     echo "setup_workspace.sh -h"
-    echo "JetPack_version can be 4.6.1, 5.0.2, 5.1.2, 6.0, 6.1, 6.2"
+    echo "JetPack_version can be 7.0, 6.2, 6.1, 6.0, 5.1.2, 5.0.2, 4.6.1"
     exit 1
 fi
 
@@ -43,7 +41,17 @@ export DEVDIR=$(cd `dirname $0` && pwd)
 echo "Setup JetPack $1 to sources_$JETPACK_VERSION"
 
 # Display NVIDIA license
-DisplayNvidiaLicense "${REVISION}" "${LICENSE}"
+JETSON_L4T_RELEASE=${REVISION%%.*}
+JETSON_L4T_REVISION=${REVISION#*.}
+JETSON_L4T_REVISION_LONG=${JETSON_L4T_REVISION#*.}
+if [[ $JETSON_L4T_REVISION = $JETSON_L4T_REVISION_LONG ]]; then
+	JETSON_L4T_REVISION_LONG=$JETSON_L4T_REVISION.0
+else
+	JETSON_L4T_REVISION_LONG=$JETSON_L4T_REVISION
+fi
+
+DisplayNvidiaLicense "r${JETSON_L4T_RELEASE}_Release_v${JETSON_L4T_REVISION_LONG}"
+
 
 # Install L4T gcc if not installed
 if [[ $(uname -m) == aarch64 ]]; then
@@ -79,7 +87,7 @@ elif [[ -f "./scripts/source_sync_$JETPACK_VERSION.sh" ]]; then
 fi
 
 # copy Makefile for jp6
-if [[ "$JETPACK_VERSION" == "6.x" ]]; then
+if [[ ! version_lt "$JETPACK_VERSION" 6.0 ]]; then
     cp ./nvidia-oot/Makefile "sources_$JETPACK_VERSION/"
     cp ./kernel/kernel-jammy-src/Makefile "sources_$JETPACK_VERSION/kernel"
 fi

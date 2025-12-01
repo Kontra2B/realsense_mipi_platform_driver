@@ -44,6 +44,16 @@ if [[ "$ACTION" == reset && -d "sources_$JETPACK_VERSION/hardware/nvidia/platfor
     rm -rfv "sources_$JETPACK_VERSION/hardware/nvidia/platform/t19x/galen-industrial" > /dev/null
 fi
 
+function version_lt {
+	IFS='.' read -r -a v1 <<< "$1"
+	IFS='.' read -r -a v2 <<< "$2"
+	for i in 0 1 2; do
+		[[ v1[i] -lt v2[i] ]] && return 0
+		[[ v1[i] -gt v2[i] ]] && return 1
+	done
+	return 1
+}
+
 apply_external_patches() {
     git -C "sources_$JETPACK_VERSION/$3" status > /dev/null
     if [[ "$1" == 'apply' ]]; then
@@ -68,10 +78,10 @@ apply_external_patches "$ACTION" "$1" "$D4XX_SRC_DST" "$L4T_VERSION"
 
 [[ -d "sources_$JETPACK_VERSION/$KERNEL_DIR" ]] && apply_external_patches "$ACTION" "$1" "$KERNEL_DIR" "$L4T_VERSION"
 
-if [[ "$JETPACK_VERSION" == "6.x" ]]; then
-    apply_external_patches "$ACTION" "$JETPACK_VERSION" "hardware/nvidia/t23x/nv-public" "$L4T_VERSION"
-else
+if version_lt "$JETPACK_VERSION" 6.0; then
     apply_external_patches "$ACTION" "$1" "hardware/nvidia/platform/t19x/galen/kernel-dts" "$L4T_VERSION"
+else
+    apply_external_patches "$ACTION" "$JETPACK_VERSION" "hardware/nvidia/t23x/nv-public" "$L4T_VERSION"
 fi
 
 if [[ "$ACTION" = "apply" ]]; then
