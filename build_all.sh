@@ -29,12 +29,10 @@ if [[ $(uname -m) == aarch64 ]]; then
     echo Native build
     echo
 else
-    if [[ "$JETPACK_VERSION" == "6.x" ]]; then
-        export CROSS_COMPILE=$DEVDIR/l4t-gcc/$JETPACK_VERSION/bin/aarch64-buildroot-linux-gnu-
-    elif [[ "$JETPACK_VERSION" == "5.x" ]]; then
-        export CROSS_COMPILE=$DEVDIR/l4t-gcc/$JETPACK_VERSION/bin/aarch64-buildroot-linux-gnu-
-    elif [[ "$JETPACK_VERSION" == "4.6.1" ]]; then
+    if [[ "$JETPACK_VERSION" == "4.6.1" ]]; then
         export CROSS_COMPILE=$DEVDIR/l4t-gcc/$JETPACK_VERSION/bin/aarch64-linux-gnu-
+    else
+        export CROSS_COMPILE=$DEVDIR/l4t-gcc/$JETPACK_VERSION/bin/aarch64-buildroot-linux-gnu-
     fi
 fi
 
@@ -49,9 +47,10 @@ export KERNEL_MODULES_OUT=$TEGRA_KERNEL_OUT/modules
 # Build jp6 out-of-tree modules
 # following: 
 # https://docs.nvidia.com/jetson/archives/r36.2/DeveloperGuide/SD/Kernel/KernelCustomization.html#building-the-jetson-linux-kernel
-if [[ "$JETPACK_VERSION" == "6.x" ]]; then
+if ! version_lt "$JETPACK_VERSION" 6.0; then
     cd $SRCS
-    export KERNEL_HEADERS=$SRCS/kernel/kernel-jammy-src
+    export KERNEL_HEADERS=$SRCS/$KERNEL_DIR
+    echo export KERNEL_HEADERS=$SRCS/$KERNEL_DIR
     ln -sf $TEGRA_KERNEL_OUT $SRCS/out
     if [[ "$DEVDBG" == "1" ]]; then
         cd $KERNEL_HEADERS
