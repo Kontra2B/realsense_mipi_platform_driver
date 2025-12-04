@@ -53,7 +53,7 @@ apply_external_patches() {
         fi
         ls -Ld "${PWD}/$3/$2"
         ls -Lw1 "${PWD}/$3/$2"
-        git -C "sources_$JETPACK_VERSION/$3" apply --reject "${PWD}/$3/$2"/*
+        git -C "sources_$JETPACK_VERSION/$3" apply "${PWD}/$3/$2"/*
     elif [ "$1" = "reset" ]; then
         if ! git -C "sources_$JETPACK_VERSION/$3" diff --quiet || ! git -C "sources_$JETPACK_VERSION/$3" diff --cached --quiet; then
             read -p "Repo sources_$JETPACK_VERSION/$3 has changes that will be hard reset. Continue (y/N)? " confirm
@@ -76,7 +76,7 @@ fi
 
 if [[ "$ACTION" = "apply" ]]; then
     cp -i kernel/realsense/d4xx.c "sources_$JETPACK_VERSION/${D4XX_SRC_DST}/drivers/media/i2c/"
-    if version_lt "$JETPACK_VERSION" 6.0 ]]; then
+    if version_lt "$JETPACK_VERSION" 6.0; then
         cp "hardware/realsense/${JP5_D4XX_DTSI}" "sources_$JETPACK_VERSION/hardware/nvidia/platform/t19x/galen/kernel-dts/common/tegra194-camera-d4xx.dtsi"
     else
         # jp6 overlay

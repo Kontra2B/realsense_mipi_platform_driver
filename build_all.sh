@@ -50,7 +50,6 @@ export KERNEL_MODULES_OUT=$TEGRA_KERNEL_OUT/modules
 if ! version_lt "$JETPACK_VERSION" 6.0; then
     cd $SRCS
     export KERNEL_HEADERS=$SRCS/$KERNEL_DIR
-    echo export KERNEL_HEADERS=$SRCS/$KERNEL_DIR
     ln -sf $TEGRA_KERNEL_OUT $SRCS/out
     if [[ "$DEVDBG" == "1" ]]; then
         cd $KERNEL_HEADERS

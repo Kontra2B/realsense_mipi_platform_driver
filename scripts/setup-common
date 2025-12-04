@@ -20,8 +20,7 @@ if [[ "$JETPACK_VERSION" =~ ^7\.0$ ]]; then
     REVISION="38.2"
     #REVISION="38.2.1"
     JETPACK_VERSION="7.x"
-    export KERNEL_SRC_DIR=kernel-noble-src
-    KERNEL_DIR=$KERNEL_SRC_DIR/kernel-noble-src
+    KERNEL_DIR=kernel/kernel-noble-src
     L4T_VERSION=jetson_"${REVISION}"
 elif [[ "$JETPACK_VERSION" =~ ^6\.[0-2]$ ]]; then
     if [[ $JETPACK_VERSION == "6.2" ]]; then

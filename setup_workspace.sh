@@ -79,7 +79,11 @@ fi
 # copy Makefile for jp6
 if ! version_lt "$JETPACK_VERSION" 6.0; then
     cp ./nvidia-oot/Makefile "sources_$JETPACK_VERSION/"
-    cp ./kernel/kernel-jammy-src/Makefile "sources_$JETPACK_VERSION/kernel"
+    if ! version_lt "$JETPACK_VERSION" 7.0; then
+	    cp ./kernel/kernel-jammy-src/Makefile "sources_$JETPACK_VERSION/kernel"
+    else
+	    cp ./kernel/kernel-noble-src/Makefile "sources_$JETPACK_VERSION/kernel"
+    fi
 fi
 
 # remove BUILD_NUMBER env dependency kernel vermagic
