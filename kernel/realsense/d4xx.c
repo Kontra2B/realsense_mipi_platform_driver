@@ -188,8 +188,6 @@ enum ds5_mux_pad {
 #define DFU_BLOCK_SIZE 1024
 #ifdef CONFIG_TEGRA_CAMERA_PLATFORM
 #define DFU_I2C_STANDARD_MODE		100000
-#define DFU_I2C_FAST_MODE			400000
-#define DFU_I2C_BUS_CLK_RATE		DFU_I2C_FAST_MODE
 #endif
 #define ds5_read_with_check(state, addr, val) {\
 	if (ds5_read(state, addr, val))	\
@@ -433,7 +431,6 @@ struct ds5_dfu_dev {
 	unsigned char *dfu_msg;
 	u16 msg_write_once;
 	// unsigned char init_v4l_f; // need refactoring
-	u32 bus_clk_rate;
 };
 
 enum {
@@ -1318,7 +1315,7 @@ static int ds5_sensor_enum_frame_size(struct v4l2_subdev *sd,
 static int ds5_sensor_enum_frame_interval(struct v4l2_subdev *sd,
 #if LINUX_VERSION_CODE < KERNEL_VERSION(5, 15, 10)
 				     struct v4l2_subdev_pad_config *cfg,
-#else
+#elif LINUX_VERSION_CODE > KERNEL_VERSION(6, 0, 0)
 				     struct v4l2_subdev_state *v4l2_state,
 #endif
 					  struct v4l2_subdev_frame_interval_enum *fie)
@@ -1354,7 +1351,7 @@ static int ds5_sensor_enum_frame_interval(struct v4l2_subdev *sd,
 static int ds5_sensor_get_fmt(struct v4l2_subdev *sd,
 #if LINUX_VERSION_CODE < KERNEL_VERSION(5, 15, 10)
 				     struct v4l2_subdev_pad_config *cfg,
-#else
+#elif LINUX_VERSION_CODE > KERNEL_VERSION(6, 0, 0)
 				     struct v4l2_subdev_state *v4l2_state,
 #endif
 			      struct v4l2_subdev_format *fmt)
@@ -1370,6 +1367,8 @@ static int ds5_sensor_get_fmt(struct v4l2_subdev *sd,
 	if (fmt->which == V4L2_SUBDEV_FORMAT_TRY)
 #if LINUX_VERSION_CODE < KERNEL_VERSION(5, 15, 10)
 		fmt->format = *v4l2_subdev_get_try_format(sd, cfg, fmt->pad);
+#elif LINUX_VERSION_CODE > KERNEL_VERSION(6, 0, 0)
+		fmt->format = *v4l2_subdev_state_get_format(v4l2_state, fmt->pad);
 #else
 		fmt->format = *v4l2_subdev_get_try_format(sd, v4l2_state, fmt->pad);
 #endif
@@ -1551,7 +1550,7 @@ static int ds5_s_state(struct ds5 *state, int vc)
 static int __ds5_sensor_set_fmt(struct ds5 *state, struct ds5_sensor *sensor,
 #if LINUX_VERSION_CODE < KERNEL_VERSION(5, 15, 10)
 				     struct v4l2_subdev_pad_config *cfg,
-#else
+#elif LINUX_VERSION_CODE > KERNEL_VERSION(6, 0, 0)
 				     struct v4l2_subdev_state *v4l2_state,
 #endif
 				struct v4l2_subdev_format *fmt)
@@ -1585,7 +1584,11 @@ static int __ds5_sensor_set_fmt(struct ds5 *state, struct ds5_sensor *sensor,
 		*v4l2_subdev_get_try_format(&sensor->sd, cfg, fmt->pad) = *mf;
 #else
 	if (v4l2_state && fmt->which == V4L2_SUBDEV_FORMAT_TRY)
+#if LINUX_VERSION_CODE > KERNEL_VERSION(6, 0, 0)
+		*v4l2_subdev_state_get_format(v4l2_state, fmt->pad) = *mf;
+#else
 		*v4l2_subdev_get_try_format(&sensor->sd, v4l2_state, fmt->pad) = *mf;
+#endif
 #endif
 
 	else
@@ -1780,6 +1783,9 @@ static const struct v4l2_subdev_pad_ops ds5_depth_pad_ops = {
 };
 
 static int ds5_sensor_g_frame_interval(struct v4l2_subdev *sd,
+#if LINUX_VERSION_CODE > KERNEL_VERSION(6, 0, 0)
+		struct v4l2_subdev_state *state,
+#endif
 		struct v4l2_subdev_frame_interval *fi)
 {
 	struct ds5_sensor *sensor = container_of(sd, struct ds5_sensor, sd);
@@ -1798,6 +1804,9 @@ static int ds5_sensor_g_frame_interval(struct v4l2_subdev *sd,
 static u16 __ds5_probe_framerate(const struct ds5_resolution *res, u16 target);
 
 static int ds5_sensor_s_frame_interval(struct v4l2_subdev *sd,
+#if LINUX_VERSION_CODE > KERNEL_VERSION(6, 0, 0)
+		struct v4l2_subdev_state *state,
+#endif
 		struct v4l2_subdev_frame_interval *fi)
 {
 	struct ds5_sensor *sensor = container_of(sd, struct ds5_sensor, sd);
@@ -1830,8 +1839,10 @@ static int ds5_sensor_s_stream(struct v4l2_subdev *sd, int on)
 }
 
 static const struct v4l2_subdev_video_ops ds5_sensor_video_ops = {
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 0, 0)
 	.g_frame_interval	= ds5_sensor_g_frame_interval,
 	.s_frame_interval	= ds5_sensor_s_frame_interval,
+#endif
 	.s_stream		= ds5_sensor_s_stream,
 };
 
@@ -1844,6 +1855,10 @@ static const struct v4l2_subdev_ops ds5_depth_subdev_ops = {
 
 /* FIXME: identical to ds5_depth_pad_ops, use one for both */
 static const struct v4l2_subdev_pad_ops ds5_ir_pad_ops = {
+#if LINUX_VERSION_CODE > KERNEL_VERSION(6, 0, 0)
+	.get_frame_interval	= ds5_sensor_g_frame_interval,
+	.set_frame_interval	= ds5_sensor_s_frame_interval,
+#endif
 	.enum_mbus_code		= ds5_sensor_enum_mbus_code,
 	.enum_frame_size	= ds5_sensor_enum_frame_size,
 	.enum_frame_interval	= ds5_sensor_enum_frame_interval,
@@ -4241,15 +4256,16 @@ static int ds5_mux_get_fmt(struct v4l2_subdev *sd,
 
 /* Video ops */
 static int ds5_mux_g_frame_interval(struct v4l2_subdev *sd,
+		struct v4l2_subdev_state *state,
 		struct v4l2_subdev_frame_interval *fi)
 {
-	struct ds5 *state = container_of(sd, struct ds5, mux.sd.subdev);
+	struct ds5 *ds5_state = container_of(sd, struct ds5, mux.sd.subdev);
 	struct ds5_sensor *sensor = NULL;
 
 	if (NULL == sd || NULL == fi)
 		return -EINVAL;
 
-	sensor = state->mux.last_set;
+	sensor = ds5_state->mux.last_set;
 
 	fi->interval.numerator = 1;
 	fi->interval.denominator = sensor->config.framerate;
@@ -4275,16 +4291,17 @@ static u16 __ds5_probe_framerate(const struct ds5_resolution *res, u16 target)
 }
 
 static int ds5_mux_s_frame_interval(struct v4l2_subdev *sd,
+		struct v4l2_subdev_state *state,
 		struct v4l2_subdev_frame_interval *fi)
 {
-	struct ds5 *state = container_of(sd, struct ds5, mux.sd.subdev);
+	struct ds5 *ds5_state = container_of(sd, struct ds5, mux.sd.subdev);
 	struct ds5_sensor *sensor = NULL;
 	u16 framerate = 1;
 
 	if (NULL == sd || NULL == fi || fi->interval.numerator == 0)
 		return -EINVAL;
 
-	sensor = state->mux.last_set;
+	sensor = ds5_state->mux.last_set;
 
 	framerate = fi->interval.denominator / fi->interval.numerator;
 	framerate = __ds5_probe_framerate(sensor->config.resolution, framerate);
@@ -4525,6 +4542,10 @@ static int ds5_mux_get_frame_desc(struct v4l2_subdev *sd,
 }
 
 static const struct v4l2_subdev_pad_ops ds5_mux_pad_ops = {
+#if LINUX_VERSION_CODE > KERNEL_VERSION(6, 0, 0)
+	.get_frame_interval	= ds5_mux_g_frame_interval,
+	.set_frame_interval	= ds5_mux_s_frame_interval,
+#endif
 	.enum_mbus_code		= ds5_mux_enum_mbus_code,
 	.enum_frame_size	= ds5_mux_enum_frame_size,
 	.enum_frame_interval	= ds5_mux_enum_frame_interval,
@@ -4539,8 +4560,10 @@ static const struct v4l2_subdev_core_ops ds5_mux_core_ops = {
 };
 
 static const struct v4l2_subdev_video_ops ds5_mux_video_ops = {
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 0, 0)
 	.g_frame_interval	= ds5_mux_g_frame_interval,
 	.s_frame_interval	= ds5_mux_s_frame_interval,
+#endif
 	.s_stream		= ds5_mux_s_stream,
 };
 
@@ -5227,14 +5250,6 @@ static int ds5_dfu_device_open(struct inode *inode, struct file *file)
 		mutex_unlock(&state->lock);
 		return 0;
 	}
-	dev_dbg(&state->client->dev, "%s(): i2c-%d bus_clk = %d, set %d\n",
-			__func__,
-			i2c_adapter_id(parent),
-			i2c_get_adapter_bus_clk_rate(parent),
-			DFU_I2C_BUS_CLK_RATE);
-
-	state->dfu_dev.bus_clk_rate = i2c_get_adapter_bus_clk_rate(parent);
-	i2c_set_adapter_bus_clk_rate(parent, DFU_I2C_BUS_CLK_RATE);
 #endif
 	mutex_unlock(&state->lock);
 	return 0;
@@ -5319,12 +5334,6 @@ static int ds5_dfu_device_release(struct inode *inode, struct file *file)
 		mutex_unlock(&state->lock);
 		return 0;
 	}
-	dev_dbg(&state->client->dev, "%s(): i2c-%d bus_clk %d, restore to %d\n",
-			__func__, i2c_adapter_id(parent),
-			i2c_get_adapter_bus_clk_rate(parent),
-			state->dfu_dev.bus_clk_rate);
-
-	i2c_set_adapter_bus_clk_rate(parent, state->dfu_dev.bus_clk_rate);
 #endif
 	/* Verify communication */
 	do {
@@ -5377,7 +5386,12 @@ static int ds5_chrdev_init(struct i2c_client *c, struct ds5 *state)
 		dev_dbg(&c->dev, "%s(): <Major, Minor>: <%d, %d>\n",
 				__func__, MAJOR(*dev_num), MINOR(*dev_num));
 		/* Create a class : appears at /sys/class */
-		*ds5_class = class_create(THIS_MODULE, DS5_DRIVER_NAME_CLASS);
+		*ds5_class = class_create(
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 0, 0)
+				THIS_MODULE,
+#endif
+				DS5_DRIVER_NAME_CLASS);
+		*ds5_class = class_create(DS5_DRIVER_NAME_CLASS);
 		dev_warn(&state->client->dev, "%s() class_create\n", __func__);
 		if (IS_ERR(*ds5_class)) {
 			dev_err(&c->dev, "Could not create class device\n");
@@ -5645,9 +5659,16 @@ static const struct attribute_group ds5_attr_group = {
 #ifdef CONFIG_VIDEO_INTEL_IPU6
 #define NR_DESER 4
 #endif //CONFIG_VIDEO_INTEL_IPU6
-static int ds5_probe(struct i2c_client *c, const struct i2c_device_id *id)
+static int ds5_probe(struct i2c_client *c
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 0, 0)
+		, const struct i2c_device_id *id
+#endif
+		)
 {
 	struct ds5 *state = devm_kzalloc(&c->dev, sizeof(*state), GFP_KERNEL);
+#if !(LINUX_VERSION_CODE < KERNEL_VERSION(6, 0, 0))
+	const struct i2c_device_id *id = i2c_client_get_device_id(c);
+#endif
 	u16 rec_state;
 	int ret, retry, err = 0;
 #ifdef CONFIG_OF
@@ -5790,7 +5811,11 @@ e_regulator:
 	return ret;
 }
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 8, 12)
 static int ds5_remove(struct i2c_client *c)
+#else
+static void ds5_remove(struct i2c_client *c)
+#endif
 {
 #ifdef CONFIG_VIDEO_D4XX_SERDES
 	int i, ret;
@@ -5857,7 +5882,9 @@ static int ds5_remove(struct i2c_client *c)
 		ds5_chrdev_remove(state);
 	}
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 8, 12)
 	return 0;
+#endif
 }
 
 static const struct i2c_device_id ds5_id[] = {

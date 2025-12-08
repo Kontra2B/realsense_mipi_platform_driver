@@ -79,6 +79,8 @@ nvidia-oot: conftest hwpm
 		-C $(KERNEL_OUTPUT) \
 		M=$(MAKEFILE_DIR)/nvidia-oot \
 		CONFIG_TEGRA_OOT_MODULE=m \
+		NV_OOT_TEGRA_HV_SKIP_BUILD=y \
+		NV_OOT_IVC_EXT_SKIP_BUILD=y \
 		srctree.nvidia-oot=$(MAKEFILE_DIR)/nvidia-oot \
 		srctree.hwpm=$(MAKEFILE_DIR)/hwpm \
 		srctree.nvconftest=$(NVIDIA_CONFTEST) \
@@ -108,6 +110,8 @@ define display-cmd
 	$(MAKE) -j $(NPROC) ARCH=arm64 TARGET_ARCH=aarch64 \
 		-C $(MAKEFILE_DIR)/nvdisplay \
 		LOCALVERSION=$(version) \
+		NV_OOT_TEGRA_HV_SKIP_BUILD=y \
+		NV_OOT_IVC_EXT_SKIP_BUILD=y \
 		NV_VERBOSE=0 \
 		KERNELRELEASE="" \
 		SYSSRC=$(NVIDIA_HEADERS) \
