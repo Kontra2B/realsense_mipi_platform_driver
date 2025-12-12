@@ -15,7 +15,7 @@ function DisplayNvidiaLicense {
     ## display the page ##
     echo -e "${license}"
 
-    read -t 30 -n 1 -s -r -e -p 'Press any key to continue (or wait 30 seconds..)'
+    read -t 30 -n 1 -s -r -e -p 'Press any key to ACCEPT and continue...'
 }
 
 if [[ "$1" == "-h" ]]; then
@@ -54,7 +54,7 @@ else
         cd $DEVDIR/l4t-gcc/$JETPACK_VERSION
         if ! version_lt "$JETPACK_VERSION" 7.0; then
             wget --quiet --show-progress https://developer.nvidia.com/downloads/embedded/L4T/r38_Release_v2.0/release/x-tools.tbz2
-            tar xf x-tools.tar.bz2 --strip-components 1
+            tar xf x-tools.tbz2 --strip-components 3
         elif ! version_lt "$JETPACK_VERSION" 6.0; then
             wget --quiet --show-progress https://developer.nvidia.com/downloads/embedded/l4t/r36_release_v3.0/toolchain/aarch64--glibc--stable-2022.08-1.tar.bz2 -O aarch64--glibc--stable-final.tar.bz2
             tar xf aarch64--glibc--stable-final.tar.bz2 --strip-components 1

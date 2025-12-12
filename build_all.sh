@@ -29,10 +29,12 @@ if [[ $(uname -m) == aarch64 ]]; then
     echo Native build
     echo
 else
-    if [[ "$JETPACK_VERSION" == "4.6.1" ]]; then
-        export CROSS_COMPILE=$DEVDIR/l4t-gcc/$JETPACK_VERSION/bin/aarch64-linux-gnu-
-    else
+	if ! version_lt "$JETPACK_VERSION" 7.0; then
+        export CROSS_COMPILE=$DEVDIR/l4t-gcc/$JETPACK_VERSION/bin/aarch64-none-linux-gnu-
+	elif ! version_lt "$JETPACK_VERSION" 6.0; then
         export CROSS_COMPILE=$DEVDIR/l4t-gcc/$JETPACK_VERSION/bin/aarch64-buildroot-linux-gnu-
+    else
+        export CROSS_COMPILE=$DEVDIR/l4t-gcc/$JETPACK_VERSION/bin/aarch64-linux-gnu-
     fi
 fi
 
