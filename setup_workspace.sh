@@ -52,13 +52,16 @@ else
     if [[ ! -d "$DEVDIR/l4t-gcc/$JETPACK_VERSION/bin/" ]]; then
         mkdir -p $DEVDIR/l4t-gcc/$JETPACK_VERSION
         cd $DEVDIR/l4t-gcc/$JETPACK_VERSION
-        if [[ "$JETPACK_VERSION" == "6.x" ]]; then
+        if ! version_lt "$JETPACK_VERSION" 7.0; then
+            wget --quiet --show-progress https://developer.nvidia.com/downloads/embedded/L4T/r38_Release_v2.0/release/x-tools.tbz2
+            tar xf x-tools.tar.bz2 --strip-components 1
+        elif ! version_lt "$JETPACK_VERSION" 6.0; then
             wget --quiet --show-progress https://developer.nvidia.com/downloads/embedded/l4t/r36_release_v3.0/toolchain/aarch64--glibc--stable-2022.08-1.tar.bz2 -O aarch64--glibc--stable-final.tar.bz2
             tar xf aarch64--glibc--stable-final.tar.bz2 --strip-components 1
-        elif [[ "$JETPACK_VERSION" == "5.x" ]]; then
+        elif ! version_lt "$JETPACK_VERSION" 5.0; then
             wget --quiet --show-progress https://developer.nvidia.com/embedded/jetson-linux/bootlin-toolchain-gcc-93 -O aarch64--glibc--stable-final.tar.gz
             tar xf aarch64--glibc--stable-final.tar.gz
-        elif [[ "$JETPACK_VERSION" == "4.6.1" ]]; then
+		else
             wget --quiet --show-progress http://releases.linaro.org/components/toolchain/binaries/7.3-2018.05/aarch64-linux-gnu/gcc-linaro-7.3.1-2018.05-x86_64_aarch64-linux-gnu.tar.xz
             tar xf gcc-linaro-7.3.1-2018.05-x86_64_aarch64-linux-gnu.tar.xz --strip-components 1
         fi
@@ -76,14 +79,10 @@ elif [[ -f "./scripts/source_sync_$JETPACK_VERSION.sh" ]]; then
 	"./scripts/source_sync_$JETPACK_VERSION.sh" -t "$L4T_VERSION" -d "sources_$JETPACK_VERSION"
 fi
 
-# copy Makefile for jp6
+# copy Makefile for jp6 and up
 if ! version_lt "$JETPACK_VERSION" 6.0; then
     cp ./nvidia-oot/Makefile "sources_$JETPACK_VERSION/"
-    if ! version_lt "$JETPACK_VERSION" 7.0; then
-	    cp ./kernel/kernel-jammy-src/Makefile "sources_$JETPACK_VERSION/kernel"
-    else
-	    cp ./kernel/kernel-noble-src/Makefile "sources_$JETPACK_VERSION/kernel"
-    fi
+	cp ./$KERNEL_DIR/Makefile "sources_$JETPACK_VERSION/kernel"
 fi
 
 # remove BUILD_NUMBER env dependency kernel vermagic
