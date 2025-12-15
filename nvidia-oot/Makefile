@@ -117,7 +117,6 @@ define display-cmd
 		SYSSRC=$(NVIDIA_HEADERS) \
 		SYSOUT=$(NVIDIA_HEADERS) \
 		SYSSRCHOST1X=$(MAKEFILE_DIR)/nvidia-oot/drivers/gpu/host1x/include \
-		SYSSRCNVOOT=$(MAKEFILE_DIR)/nvidia-oot \
 		CC=$(CROSS_COMPILE)gcc \
 		LD=$(CROSS_COMPILE)ld.bfd \
 		AR=$(CROSS_COMPILE)ar \

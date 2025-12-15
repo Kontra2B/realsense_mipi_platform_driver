@@ -2227,7 +2227,7 @@ static int ds5_s_ctrl(struct v4l2_ctrl *ctrl)
 				memcpy(calib_cmd, &set_calib_data, sizeof(set_calib_data));
 				calib_cmd->header = 276;
 				calib_cmd->param1 = DEPTH_CALIBRATION_ID;
-				memcpy(calib_cmd->Data, (u8 *)ctrl->p_new.p, 256);
+				__memcpy(calib_cmd->Data, (u8 *)ctrl->p_new.p, 256);
 				ret = ds5_set_calibration_data(state, calib_cmd,
 					sizeof(struct hwm_cmd) + 256);
 				devm_kfree(&state->client->dev, calib_cmd);
@@ -2256,7 +2256,7 @@ static int ds5_s_ctrl(struct v4l2_ctrl *ctrl)
 				memcpy(calib_cmd, &set_calib_data, sizeof (set_calib_data));
 				calib_cmd->header = 532;
 				calib_cmd->param1 = COEF_CALIBRATION_ID;
-				memcpy(calib_cmd->Data, (u8 *)ctrl->p_new.p, 512);
+				__memcpy(calib_cmd->Data, (u8 *)ctrl->p_new.p, 512);
 				ret = ds5_set_calibration_data(state, calib_cmd,
 						sizeof(struct hwm_cmd) + 512);
 				devm_kfree(&state->client->dev, calib_cmd);
@@ -2292,7 +2292,7 @@ static int ds5_s_ctrl(struct v4l2_ctrl *ctrl)
 				break;
 			}
 			memcpy(ae_setpoint_cmd, &set_ae_setpoint, sizeof (set_ae_setpoint));
-			memcpy(ae_setpoint_cmd->Data, (u8 *)ctrl->p_new.p_s32, 4);
+			__memcpy(ae_setpoint_cmd->Data, (u8 *)ctrl->p_new.p_s32, 4);
 			ret = ds5_send_hwmc(state, sizeof(struct hwm_cmd) + 4,
 					ae_setpoint_cmd);
 			if (!ret)
