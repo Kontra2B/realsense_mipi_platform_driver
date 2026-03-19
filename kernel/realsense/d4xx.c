@@ -185,7 +185,7 @@ enum ds5_mux_pad {
 
 #define DS5_N_CONTROLS			8
 
-#define CSI2_MAX_VIRTUAL_CHANNELS	4
+#define DS5_MAX_STREAMS	4
 
 #define PIPE_NOT_CONFIGURED	-1
 
@@ -407,7 +407,6 @@ struct ds5_sensor {
 		u16 framerate;
 	} config;
 	bool streaming;
-	/*struct ds5_vchan *vchan;*/
 	const struct ds5_format *formats;
 	unsigned int n_formats;
 	int pipe_id;
@@ -467,7 +466,6 @@ struct ds5 {
 	struct ds5_dfu_dev dfu_dev;
 	bool power;
 	struct i2c_client *client;
-	/*struct ds5_vchan virtual_channels[CSI2_MAX_VIRTUAL_CHANNELS];*/
 	/* All below pointers are used for writing, cannot be const */
 	struct mutex lock;
 	struct regmap *regmap;
@@ -1781,11 +1779,19 @@ static int ds5_setup_pipeline(struct ds5 *state, u8 data_type1, u8 data_type2,
 			      int pipe_id, u32 vc_id)
 {
 	int ret = 0;
+	/* While some deserializers can support up to 8 pipes, the serializer only supports
+	 * four pipes and four vc_ids (0 - 3).
+	 * In this case, a second camera connected to a deserializer, will have its pipes 0 - 3
+	 * with vc_id 0 - 3 connected to the deserializer's pipes 4 - 7 and vc_ids 4 - 7
+	 */
+	int ser_pipe_id = pipe_id % DS5_MAX_STREAMS;
+	int ser_vc_id = vc_id % DS5_MAX_STREAMS;
+
 	dev_dbg(&state->client->dev,
-			"set pipe %d, data_type1: 0x%x, data_type2: 0x%x, vc_id: %u\n",
-			pipe_id, data_type1, data_type2, vc_id);
-	ret |= max9295_set_pipe(state->ser_dev, pipe_id,
-				data_type1, data_type2, vc_id);
+			"set ser pipe %d, dser pipe %d, data_type1: 0x%x, data_type2: 0x%x, ser_vc_id: %u, vc_id: %u\n",
+			ser_pipe_id, pipe_id, data_type1, data_type2, ser_vc_id, vc_id);
+	ret |= max9295_set_pipe(state->ser_dev, ser_pipe_id,
+				data_type1, data_type2, ser_vc_id);
 	ret |= state->dser_ops->set_pipe(state->dser_dev, pipe_id,
 				data_type1, data_type2, vc_id);
 	if (ret)

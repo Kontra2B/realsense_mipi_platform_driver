@@ -20,7 +20,7 @@
 
 /* camera control gpio definitions */
 / {
-	overlay-name = "DUAL Jetson RealSense Camera D4xx with max96712 and tca9546 (fg12-16ch)";
+	overlay-name = "DUAL Jetson RealSense Camera D4xx with max96712 and tca9546 (fg12-16ch) for Calibration";
 	jetson-header-name = "Jetson AGX CSI Connector";
 	compatible = JETSON_COMPATIBLE;
 
@@ -366,7 +366,6 @@
 								reg = <0x29>;
 								compatible = "maxim,max96712";
 								csi-mode = "2x4";
-								max-src = <1>;
 								channel = "a";
 								pwdn-gpios = <&gpio CAM0_PWDN GPIO_ACTIVE_HIGH>;
 							};
@@ -462,7 +461,7 @@
 									mclk_khz = "24000";
 									pix_clk_hz = "74250000";
 									line_length = "1280"; /* 2200 */
-									embedded_metadata_height = "1";
+									embedded_metadata_height = "0";
 								};
 								gmsl-link {
 									src-csi-port = "b";
@@ -582,12 +581,11 @@
 								reg = <0x29>;
 								compatible = "maxim,max96712";
 								csi-mode = "2x4";
-								max-src = <1>;
 								channel = "b";
 								pwdn-gpios = <&gpio CAM1_PWDN GPIO_ACTIVE_HIGH>;
 							};
 
-							ser_b: max9295_a@40 {
+							ser_b: max9295_b@40 {
 								status = "okay";
 								compatible = "maxim,max9295";
 								reg = <0x40>;
@@ -678,7 +676,7 @@
 									mclk_khz = "24000";
 									pix_clk_hz = "74250000";
 									line_length = "1280"; /* 2200 */
-									embedded_metadata_height = "1";
+									embedded_metadata_height = "0";
 								};
 								gmsl-link {
 									src-csi-port = "b";
