@@ -1,24 +1,136 @@
 From 317b49f2e4e8838181ae1804547fa1c7662d350b Mon Sep 17 00:00:00 2001
 From: ejgoldik <ehud.joseph.goldik@realsenseai.com>
 Date: Wed, 18 Feb 2026 16:30:47 +0200
-Subject: [PATCH] Adding max96712 support for D4xx
+Subject: [PATCH] Adding max96712 support for D4xx with GPIO tunneling
+
+Add MAX96712 deserializer driver support and GPIO tunneling for external sync.
+
+Includes:
+- MAX96712 driver implementation and header
+- GPIO tunneling / ESYNC register configuration for MAX9295A and MAX96712A
+- D4XX SerDes integration
 
 Signed-off-by: ejgoldik <ehud.joseph.goldik@realsenseai.com>
 ---
- drivers/media/i2c/max96712.c | 333 +++++++++++++++++++++++++++++++----
- 1 file changed, 301 insertions(+), 32 deletions(-)
-
+diff --git a/drivers/media/i2c/max9295.c b/drivers/media/i2c/max9295.c
+index f1db5e369..d7226af6e 100644
+--- a/drivers/media/i2c/max9295.c
++++ b/drivers/media/i2c/max9295.c
+@@ -35,6 +35,9 @@
+ #define MAX9295_SRC_CTRL_ADDR 0x2BF
+ #define MAX9295_SRC_PWDN_ADDR 0x02BE
+ #define MAX9295_2C0_ADDR 0x02C0
++#define MAX9295_2C1_ADDR 0x02C1
++#define MAX9295_2C2_ADDR 0x02C2
++#define MAX9295_2C3_ADDR 0x02C3
+ #define MAX9295_SRC_OUT_RCLK_ADDR 0x3F1
+ #define MAX9295_START_PIPE_ADDR 0x311
+ #define MAX9295_PIPE_EN_ADDR 0x2
+@@ -99,8 +102,12 @@
+ 
+ #define MAX9295_PWDN_GPIO 0x90
+ #define MAX9295_PWDN_ESYNC 0x04
++#define MAX9295_PWDN_ESYNC_EXT 0x24
+ 
+ #define MAX9295_2C0_ESYNC 0x57
++#define MAX9295_2C1_ESYNC 0x05
++#define MAX9295_2C2_ESYNC 0x1F
++#define MAX9295_2C3_ESYNC 0x5F
+ 
+ #define MAX9295_MAX_PIPES 0x4
+ 
+@@ -383,6 +390,49 @@ error:
+ }
+ EXPORT_SYMBOL(max9295_setup_control);
+ 
++int max9295_setup_gpio_tunneling(struct device *dev)
++{
++	struct max9295 *priv = dev_get_drvdata(dev);
++	int err = 0;
++	unsigned int readback = 0;
++
++	mutex_lock(&priv->lock);
++
++	dev_info(dev, "%s: writing GPIO tunneling registers\n", __func__);
++
++	/* Override ESYNC config for MAX96712A deserializer */
++	max9295_write_reg(dev, MAX9295_SRC_PWDN_ADDR, MAX9295_PWDN_ESYNC_EXT);
++	regmap_read(priv->regmap, MAX9295_SRC_PWDN_ADDR, &readback);
++	dev_info(dev, "%s: reg 0x%04x written 0x%02x readback 0x%02x %s\n",
++		__func__, MAX9295_SRC_PWDN_ADDR, MAX9295_PWDN_ESYNC_EXT,
++		readback, (readback == MAX9295_PWDN_ESYNC_EXT) ? "OK" : "MISMATCH");
++
++	max9295_write_reg(dev, MAX9295_2C1_ADDR, MAX9295_2C1_ESYNC);
++	regmap_read(priv->regmap, MAX9295_2C1_ADDR, &readback);
++	dev_info(dev, "%s: reg 0x%04x written 0x%02x readback 0x%02x %s\n",
++		__func__, MAX9295_2C1_ADDR, MAX9295_2C1_ESYNC,
++		readback, (readback == MAX9295_2C1_ESYNC) ? "OK" : "MISMATCH");
++
++	max9295_write_reg(dev, MAX9295_2C2_ADDR, MAX9295_2C2_ESYNC);
++	regmap_read(priv->regmap, MAX9295_2C2_ADDR, &readback);
++	dev_info(dev, "%s: reg 0x%04x written 0x%02x readback 0x%02x %s\n",
++		__func__, MAX9295_2C2_ADDR, MAX9295_2C2_ESYNC,
++		readback, (readback == MAX9295_2C2_ESYNC) ? "OK" : "MISMATCH");
++
++	max9295_write_reg(dev, MAX9295_2C3_ADDR, MAX9295_2C3_ESYNC);
++	regmap_read(priv->regmap, MAX9295_2C3_ADDR, &readback);
++	dev_info(dev, "%s: reg 0x%04x written 0x%02x readback 0x%02x %s\n",
++		__func__, MAX9295_2C3_ADDR, MAX9295_2C3_ESYNC,
++		readback, (readback == MAX9295_2C3_ESYNC) ? "OK" : "MISMATCH");
++
++	dev_info(dev, "%s: GPIO tunneling register config done\n", __func__);
++
++	mutex_unlock(&priv->lock);
++
++	return err;
++}
++EXPORT_SYMBOL(max9295_setup_gpio_tunneling);
++
+ int max9295_reset_control(struct device *dev)
+ {
+ 	struct max9295 *priv = dev_get_drvdata(dev);
+@@ -672,6 +722,7 @@ static int max9295_remove(struct i2c_client *client)
+ 
+ 	if (client != NULL) {
+ 		priv = dev_get_drvdata(&client->dev);
++
+ 		mutex_destroy(&priv->lock);
+ 		i2c_unregister_device(client);
+ 		client = NULL;
+@@ -717,4 +768,5 @@ module_exit(max9295_exit);
+ 
+ MODULE_DESCRIPTION("GMSL Serializer driver max9295");
+ MODULE_AUTHOR("Sudhir Vyas <svyas@nvidia.com>");
++MODULE_AUTHOR("Dmitry Perchanov <dmitry.perchanov@intel.com>");
+ MODULE_LICENSE("GPL v2");
 diff --git a/drivers/media/i2c/max96712.c b/drivers/media/i2c/max96712.c
-index 329a10dfd..48f94c530 100644
+index 329a10dfd..52836c0d7 100644
 --- a/drivers/media/i2c/max96712.c
 +++ b/drivers/media/i2c/max96712.c
-@@ -25,28 +25,62 @@
- #include <linux/of.h>
+@@ -21,32 +21,78 @@
+ #include <linux/debugfs.h>
+ #include <media/camera_common.h>
+ #include <linux/module.h>
+-#include <linux/gpio.h>
+-#include <linux/of.h>
++#include <media/max96712.h>
  #include <linux/of_gpio.h>
  
-+#include <media/max96712.h>
-+
 +/* register specifics */
++#define MAX96712_306_ADDR 0x306
++#define MAX96712_307_ADDR 0x307
++#define MAX96712_308_ADDR 0x308
++#define MAX96712_313_ADDR 0x313
++#define MAX96712_314_ADDR 0x314
++#define MAX96712_315_ADDR 0x315
++
++/* ESYNC data defines */
++#define MAX96712_306_ESYNC 0xAA
++#define MAX96712_307_ESYNC 0x1F
++#define MAX96712_308_ESYNC 0x1F
++#define MAX96712_313_ESYNC 0xAA
++#define MAX96712_314_ESYNC 0x17
++#define MAX96712_315_ESYNC 0x07
 +
 +#define MAX96712_REG6_ADDR 0x6
 +#define MAX96712_CTRL1_ADDR 0x18
@@ -63,47 +175,63 @@ index 329a10dfd..48f94c530 100644
  struct max96712 *global_priv[4] ;
  
 -struct mutex max96712_rw;
--
- int max96712_write_reg_Dser(int slaveAddr,int channel,
+ 
+-int max96712_write_reg_Dser(int slaveAddr,int channel,
++int max96712_write_reg_Dser(int slaveAddr, int channel,
  			u16 addr, u8 val)
  {
  	struct i2c_client *i2c_client = NULL;
  	int bak = 0;
- 	int err = 0;
--	/* unsigned int ival = 0; */
+-	int err = 0;
++	int err;
+ 	/* unsigned int ival = 0; */
  
  	if(channel > 3 || channel < 0 || global_priv[channel] == NULL)
  		return -1;
- 
+-
 -	mutex_lock(&max96712_rw);
  	i2c_client = global_priv[channel]->i2c_client;
  	bak = i2c_client->addr;
  
-@@ -59,7 +93,6 @@ int max96712_write_reg_Dser(int slaveAddr,int channel,
+@@ -58,9 +104,9 @@ int max96712_write_reg_Dser(int slaveAddr,int channel,
+ 	{
  		dev_err(&i2c_client->dev, "%s: addr = 0x%x, val = 0x%x\n",
  				__func__, addr, val);
++		return -1;
  	}
 -	mutex_unlock(&max96712_rw);
- 	return err;
+-	return err;
++	return 0;
  }
  
-@@ -75,7 +108,6 @@ int max96712_read_reg_Dser(int slaveAddr,int channel,
+ EXPORT_SYMBOL(max96712_write_reg_Dser);
+@@ -71,11 +117,9 @@ int max96712_read_reg_Dser(int slaveAddr,int channel,
+ {
+ 	struct i2c_client *i2c_client = NULL;
+ 	int bak = 0;
+-	int err = 0;
++	int err;
  	if(channel > 3 || channel < 0 || global_priv[channel] == NULL)
  		return -1;
- 
+-
 -	mutex_lock(&max96712_rw);
  	i2c_client = global_priv[channel]->i2c_client;
  	bak = i2c_client->addr;
  	i2c_client->addr = slaveAddr / 2;
-@@ -86,7 +118,6 @@ int max96712_read_reg_Dser(int slaveAddr,int channel,
+@@ -85,9 +129,10 @@ int max96712_read_reg_Dser(int slaveAddr,int channel,
+ 	{
  		dev_err(&i2c_client->dev, "%s: addr = 0x%x, val = 0x%x\n",
  				__func__, addr, *val);
++		return -1;
  	}
 -	mutex_unlock(&max96712_rw);
- 	return err;
+-	return err;
++	return 0;
++
  }
  
-@@ -106,6 +137,20 @@ static int max96712_read_reg(struct max96712 *priv,
+ EXPORT_SYMBOL(max96712_read_reg_Dser);
+@@ -106,6 +151,20 @@ static int max96712_read_reg(struct max96712 *priv,
  	return err;
  }
  
@@ -124,7 +252,7 @@ index 329a10dfd..48f94c530 100644
  
  static int max96712_stats_show(struct seq_file *s, void *data)
  {
-@@ -161,24 +206,6 @@ static const struct file_operations max96712_debugfs_fops = {
+@@ -161,24 +220,6 @@ static const struct file_operations max96712_debugfs_fops = {
  	.release = single_release,
  };
  
@@ -149,21 +277,37 @@ index 329a10dfd..48f94c530 100644
  static int max96712_debugfs_init(const char *dir_name,
  				struct dentry **d_entry,
  				struct dentry **f_entry,
-@@ -241,6 +268,7 @@ static int max96712_probe(struct i2c_client *client,
+@@ -194,7 +235,10 @@ static int max96712_debugfs_init(const char *dir_name,
+ 	if (np) {
+ 		err = of_property_read_string(np, "channel", &priv->channel);
+ 		if (err)
++		{
+ 			dev_err(&i2c_client->dev, "channel not found\n");
++			return -EINVAL;
++		}
+ 
+ 		err = snprintf(dev_name, sizeof(dev_name), "max96712_%s", priv->channel);
+ 		if (err < 0)
+@@ -241,9 +285,10 @@ static int max96712_probe(struct i2c_client *client,
  {
  	struct max96712 *priv;
  	int err = 0;
 +	struct device_node *np = NULL;
  
  	dev_info(&client->dev, "%s: enter\n", __func__);
- 	
-@@ -254,14 +282,19 @@ static int max96712_probe(struct i2c_client *client,
+-	
++
+ 	priv = devm_kzalloc(&client->dev, sizeof(*priv), GFP_KERNEL);
+ 	priv->i2c_client = client;
+ 	priv->regmap = devm_regmap_init_i2c(priv->i2c_client,
+@@ -253,18 +298,23 @@ static int max96712_probe(struct i2c_client *client,
+ 			"regmap init failed: %ld\n", PTR_ERR(priv->regmap));
  		return -ENODEV;
  	}
- 
--	mutex_init(&max96712_rw);
 +	mutex_init(&priv->lock);
  
+-	mutex_init(&max96712_rw);
+-
 -	err = max96712_power_on(priv);
 -	if (err) {
 -		dev_err(&client->dev, "Failed to power on err =%d\n",err);
@@ -176,18 +320,22 @@ index 329a10dfd..48f94c530 100644
 +				__func__, priv->pwdn_gpio);
 +		}
  	}
- 
 +	dev_set_drvdata(&client->dev, priv);
-+
+ 
  	err = max96712_debugfs_init(NULL, NULL, NULL, priv);
  	if (err)
++	{
  		return err;
-@@ -276,8 +309,11 @@ static int max96712_probe(struct i2c_client *client,
++	}
+ 
+ 	/*set daymode by fault*/
+ 	dev_info(&client->dev, "%s:  success\n", __func__);
+@@ -276,8 +326,12 @@ static int max96712_probe(struct i2c_client *client,
  static int
  max96712_remove(struct i2c_client *client)
  {
--
 +	struct max96712 *priv;
+ 
  	if (client != NULL) {
 +		priv = dev_get_drvdata(&client->dev);
 +
@@ -195,7 +343,7 @@ index 329a10dfd..48f94c530 100644
  		i2c_unregister_device(client);
  		client = NULL;
  	}
-@@ -285,13 +321,245 @@ max96712_remove(struct i2c_client *client)
+@@ -285,13 +339,302 @@ max96712_remove(struct i2c_client *client)
  	return 0;
  }
  
@@ -381,8 +529,65 @@ index 329a10dfd..48f94c530 100644
 +
 +int max96712_setup_control(struct device *dev, struct device *s_dev)
 +{
-+	/* TODO EHUD: Is needed? */
-+	return 0;
++	struct max96712 *priv = dev_get_drvdata(dev);
++	int err = 0;
++	unsigned int readback = 0;
++
++	mutex_lock(&priv->lock);
++
++	dev_info(&priv->i2c_client->dev,
++		"%s: writing ESYNC GPIO tunneling registers\n", __func__);
++
++	/* Configure ESYNC registers for GPIO tunneling */
++	err |= max96712_write_reg(priv, MAX96712_306_ADDR, MAX96712_306_ESYNC);
++	max96712_read_reg(priv, MAX96712_306_ADDR, &readback);
++	dev_info(&priv->i2c_client->dev,
++		"%s: reg 0x%04x written 0x%02x readback 0x%02x %s\n",
++		__func__, MAX96712_306_ADDR, MAX96712_306_ESYNC,
++		readback, (readback == MAX96712_306_ESYNC) ? "OK" : "MISMATCH");
++
++	err |= max96712_write_reg(priv, MAX96712_307_ADDR, MAX96712_307_ESYNC);
++	max96712_read_reg(priv, MAX96712_307_ADDR, &readback);
++	dev_info(&priv->i2c_client->dev,
++		"%s: reg 0x%04x written 0x%02x readback 0x%02x %s\n",
++		__func__, MAX96712_307_ADDR, MAX96712_307_ESYNC,
++		readback, (readback == MAX96712_307_ESYNC) ? "OK" : "MISMATCH");
++
++	err |= max96712_write_reg(priv, MAX96712_308_ADDR, MAX96712_308_ESYNC);
++	max96712_read_reg(priv, MAX96712_308_ADDR, &readback);
++	dev_info(&priv->i2c_client->dev,
++		"%s: reg 0x%04x written 0x%02x readback 0x%02x %s\n",
++		__func__, MAX96712_308_ADDR, MAX96712_308_ESYNC,
++		readback, (readback == MAX96712_308_ESYNC) ? "OK" : "MISMATCH");
++
++	err |= max96712_write_reg(priv, MAX96712_313_ADDR, MAX96712_313_ESYNC);
++	max96712_read_reg(priv, MAX96712_313_ADDR, &readback);
++	dev_info(&priv->i2c_client->dev,
++		"%s: reg 0x%04x written 0x%02x readback 0x%02x %s\n",
++		__func__, MAX96712_313_ADDR, MAX96712_313_ESYNC,
++		readback, (readback == MAX96712_313_ESYNC) ? "OK" : "MISMATCH");
++
++	err |= max96712_write_reg(priv, MAX96712_314_ADDR, MAX96712_314_ESYNC);
++	max96712_read_reg(priv, MAX96712_314_ADDR, &readback);
++	dev_info(&priv->i2c_client->dev,
++		"%s: reg 0x%04x written 0x%02x readback 0x%02x %s\n",
++		__func__, MAX96712_314_ADDR, MAX96712_314_ESYNC,
++		readback, (readback == MAX96712_314_ESYNC) ? "OK" : "MISMATCH");
++
++	err |= max96712_write_reg(priv, MAX96712_315_ADDR, MAX96712_315_ESYNC);
++	max96712_read_reg(priv, MAX96712_315_ADDR, &readback);
++	dev_info(&priv->i2c_client->dev,
++		"%s: reg 0x%04x written 0x%02x readback 0x%02x %s\n",
++		__func__, MAX96712_315_ADDR, MAX96712_315_ESYNC,
++		readback, (readback == MAX96712_315_ESYNC) ? "OK" : "MISMATCH");
++
++	dev_info(&priv->i2c_client->dev,
++		"%s: ESYNC GPIO tunneling register config done, err=%d\n",
++		__func__, err);
++
++	mutex_unlock(&priv->lock);
++
++	return err;
 +}
 +EXPORT_SYMBOL(max96712_setup_control);
 +
@@ -442,7 +647,7 @@ index 329a10dfd..48f94c530 100644
  	{ },
  };
  
-@@ -301,6 +569,7 @@ static struct i2c_driver max96712_i2c_driver = {
+@@ -301,6 +644,7 @@ static struct i2c_driver max96712_i2c_driver = {
  	.driver = {
  		.name = "max96712",
  		.owner = THIS_MODULE,
@@ -450,6 +655,19 @@ index 329a10dfd..48f94c530 100644
  	},
  	.probe = max96712_probe,
  	.remove = max96712_remove,
+diff --git a/include/media/max9295.h b/include/media/max9295.h
+index bea15c414..6099859d2 100644
+--- a/include/media/max9295.h
++++ b/include/media/max9295.h
+@@ -99,6 +99,9 @@ int max9295_sdev_unpair(struct device *dev, struct device *s_dev);
+ int max9295_setup_streaming(struct device *dev);
+ 
+ int max9295_init_settings(struct device *dev);
++
++int max9295_setup_gpio_tunneling(struct device *dev);
++
+ /** @} */
+ 
+ #endif  /* __MAX9295_H__ */
 -- 
 2.43.0
-

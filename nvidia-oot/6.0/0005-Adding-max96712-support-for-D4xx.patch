@@ -1,24 +1,95 @@
-From ec62225a679e72f539315a27066026fb8e9e7489 Mon Sep 17 00:00:00 2001
-From: ejgoldik <ehud.joseph.goldik@realsenseai.com>
-Date: Thu, 19 Mar 2026 15:28:35 +0200
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: RealSense MIPI <realsense-mipi@intel.com>
+Date: Sat, 15 Mar 2025 10:00:00 +0200
 Subject: [PATCH] Adding max96712 support for D4xx
 
-Signed-off-by: ejgoldik <ehud.joseph.goldik@realsenseai.com>
----
- drivers/media/i2c/max96712.c | 432 ++++++++++++++++++++++++++++++++---
- 1 file changed, 396 insertions(+), 36 deletions(-)
+Add MAX96712 deserializer driver support and GPIO tunneling for external sync.
 
+Includes:
+- MAX96712 driver implementation and header
+- GPIO tunneling / ESYNC register configuration for MAX9295A and MAX96712A
+- D4XX SerDes integration
+
+---
+diff --git a/drivers/media/i2c/max9295.c b/drivers/media/i2c/max9295.c
+index 40568147..eff47e1d 100644
+--- a/drivers/media/i2c/max9295.c
++++ b/drivers/media/i2c/max9295.c
+@@ -25,6 +25,9 @@
+ #define MAX9295_SRC_CTRL_ADDR 0x2BF
+ #define MAX9295_SRC_PWDN_ADDR 0x02BE
+ #define MAX9295_2C0_ADDR 0x02C0
++#define MAX9295_2C1_ADDR 0x02C1
++#define MAX9295_2C2_ADDR 0x02C2
++#define MAX9295_2C3_ADDR 0x02C3
+ #define MAX9295_SRC_OUT_RCLK_ADDR 0x3F1
+ #define MAX9295_START_PIPE_ADDR 0x311
+ #define MAX9295_PIPE_EN_ADDR 0x2
+@@ -89,8 +92,12 @@
+ 
+ #define MAX9295_PWDN_GPIO 0x90
+ #define MAX9295_PWDN_ESYNC 0x04
++#define MAX9295_PWDN_ESYNC_EXT 0x24
+ 
+ #define MAX9295_2C0_ESYNC 0x57
++#define MAX9295_2C1_ESYNC 0x05
++#define MAX9295_2C2_ESYNC 0x1F
++#define MAX9295_2C3_ESYNC 0x5F
+ 
+ #define MAX9295_MAX_PIPES 0x4
+ 
+@@ -373,6 +380,25 @@ error:
+ }
+ EXPORT_SYMBOL(max9295_setup_control);
+ 
++int max9295_setup_gpio_tunneling(struct device *dev)
++{
++	struct max9295 *priv = dev_get_drvdata(dev);
++	int err = 0;
++
++	mutex_lock(&priv->lock);
++
++	/* Override ESYNC config for MAX96712A deserializer */
++	max9295_write_reg(dev, MAX9295_SRC_PWDN_ADDR, MAX9295_PWDN_ESYNC_EXT);
++	max9295_write_reg(dev, MAX9295_2C1_ADDR, MAX9295_2C1_ESYNC);
++	max9295_write_reg(dev, MAX9295_2C2_ADDR, MAX9295_2C2_ESYNC);
++	max9295_write_reg(dev, MAX9295_2C3_ADDR, MAX9295_2C3_ESYNC);
++
++	mutex_unlock(&priv->lock);
++
++	return err;
++}
++EXPORT_SYMBOL(max9295_setup_gpio_tunneling);
++
+ int max9295_reset_control(struct device *dev)
+ {
+ 	struct max9295 *priv = dev_get_drvdata(dev);
 diff --git a/drivers/media/i2c/max96712.c b/drivers/media/i2c/max96712.c
-index 8e237eef..98172e74 100644
+index 8e237eef..33646ace 100644
 --- a/drivers/media/i2c/max96712.c
 +++ b/drivers/media/i2c/max96712.c
-@@ -16,32 +16,75 @@
+@@ -16,32 +16,89 @@
  #include <linux/gpio.h>
  #include <linux/of.h>
  #include <linux/of_gpio.h>
+-
 +#include <media/max96712.h>
- 
++
 +/* register specifics */
++#define MAX96712_306_ADDR 0x306
++#define MAX96712_307_ADDR 0x307
++#define MAX96712_308_ADDR 0x308
++#define MAX96712_313_ADDR 0x313
++#define MAX96712_314_ADDR 0x314
++#define MAX96712_315_ADDR 0x315
++
++/* ESYNC data defines */
++#define MAX96712_306_ESYNC 0xAA
++#define MAX96712_307_ESYNC 0x1F
++#define MAX96712_308_ESYNC 0x1F
++#define MAX96712_313_ESYNC 0xAA
++#define MAX96712_314_ESYNC 0x17
++#define MAX96712_315_ESYNC 0x07
 +
 +#define MAX96712_REG6_ADDR 0x6
 +#define MAX96712_CTRL1_ADDR 0x18
@@ -93,7 +164,7 @@ index 8e237eef..98172e74 100644
  	i2c_client = global_priv[channel]->i2c_client;
  	bak = i2c_client->addr;
  
-@@ -53,7 +96,6 @@ int max96712_write_reg_Dser(int slaveAddr, int channel,
+@@ -53,7 +110,6 @@ int max96712_write_reg_Dser(int slaveAddr, int channel,
  		dev_err(&i2c_client->dev, "%s: addr = 0x%x, val = 0x%x\n",
  				__func__, addr, val);
  	}
@@ -101,7 +172,7 @@ index 8e237eef..98172e74 100644
  	return err;
  }
  EXPORT_SYMBOL(max96712_write_reg_Dser);
-@@ -68,8 +110,6 @@ int max96712_read_reg_Dser(int slaveAddr, int channel,
+@@ -68,8 +124,6 @@ int max96712_read_reg_Dser(int slaveAddr, int channel,
  
  	if (channel > 3 || channel < 0 || global_priv[channel] == NULL)
  		return -1;
@@ -110,7 +181,7 @@ index 8e237eef..98172e74 100644
  	i2c_client = global_priv[channel]->i2c_client;
  	bak = i2c_client->addr;
  	i2c_client->addr = slaveAddr / 2;
-@@ -80,11 +120,56 @@ int max96712_read_reg_Dser(int slaveAddr, int channel,
+@@ -80,11 +134,56 @@ int max96712_read_reg_Dser(int slaveAddr, int channel,
  		dev_err(&i2c_client->dev, "%s: addr = 0x%x, val = 0x%x\n",
  				__func__, addr, *val);
  	}
@@ -168,7 +239,7 @@ index 8e237eef..98172e74 100644
  static int max96712_read_reg(struct max96712 *priv,
  			u16 addr, unsigned int *val)
  {
-@@ -99,6 +184,20 @@ static int max96712_read_reg(struct max96712 *priv,
+@@ -99,6 +198,20 @@ static int max96712_read_reg(struct max96712 *priv,
  	return err;
  }
  
@@ -189,7 +260,7 @@ index 8e237eef..98172e74 100644
  
  static int max96712_stats_show(struct seq_file *s, void *data)
  {
-@@ -153,24 +252,6 @@ static const struct file_operations max96712_debugfs_fops = {
+@@ -153,24 +266,6 @@ static const struct file_operations max96712_debugfs_fops = {
  	.release = single_release,
  };
  
@@ -214,7 +285,7 @@ index 8e237eef..98172e74 100644
  static int max96712_debugfs_init(const char *dir_name,
  				struct dentry **d_entry,
  				struct dentry **f_entry,
-@@ -225,7 +306,8 @@ static int max96712_debugfs_init(const char *dir_name,
+@@ -225,7 +320,8 @@ static int max96712_debugfs_init(const char *dir_name,
  static  struct regmap_config max96712_regmap_config = {
  	.reg_bits = 16,
  	.val_bits = 8,
@@ -224,7 +295,7 @@ index 8e237eef..98172e74 100644
  };
  
  #if defined(NV_I2C_DRIVER_STRUCT_PROBE_WITHOUT_I2C_DEVICE_ID_ARG) /* Linux 6.3 */
-@@ -237,6 +319,8 @@ static int max96712_probe(struct i2c_client *client,
+@@ -237,6 +333,8 @@ static int max96712_probe(struct i2c_client *client,
  {
  	struct max96712 *priv;
  	int err = 0;
@@ -233,7 +304,7 @@ index 8e237eef..98172e74 100644
  
  	dev_info(&client->dev, "%s: enter\n", __func__);
  
-@@ -249,15 +333,31 @@ static int max96712_probe(struct i2c_client *client,
+@@ -249,15 +347,31 @@ static int max96712_probe(struct i2c_client *client,
  			"regmap init failed: %ld\n", PTR_ERR(priv->regmap));
  		return -ENODEV;
  	}
@@ -271,7 +342,7 @@ index 8e237eef..98172e74 100644
  	err = max96712_debugfs_init(NULL, NULL, NULL, priv);
  	if (err)
  		return err;
-@@ -274,8 +374,11 @@ static int max96712_remove(struct i2c_client *client)
+@@ -274,8 +388,11 @@ static int max96712_remove(struct i2c_client *client)
  static void max96712_remove(struct i2c_client *client)
  #endif
  {
@@ -284,7 +355,7 @@ index 8e237eef..98172e74 100644
  		i2c_unregister_device(client);
  		client = NULL;
  	}
-@@ -284,13 +387,269 @@ static void max96712_remove(struct i2c_client *client)
+@@ -284,13 +401,283 @@ static void max96712_remove(struct i2c_client *client)
  #endif
  }
  
@@ -494,8 +565,22 @@ index 8e237eef..98172e74 100644
 +
 +int max96712_setup_control(struct device *dev, struct device *s_dev)
 +{
-+	/* TODO EHUD: Is needed? */
-+	return 0;
++	struct max96712 *priv = dev_get_drvdata(dev);
++	int err = 0;
++
++	mutex_lock(&priv->lock);
++
++	/* Configure ESYNC registers for GPIO tunneling */
++	err |= max96712_write_reg(priv, MAX96712_306_ADDR, MAX96712_306_ESYNC);
++	err |= max96712_write_reg(priv, MAX96712_307_ADDR, MAX96712_307_ESYNC);
++	err |= max96712_write_reg(priv, MAX96712_308_ADDR, MAX96712_308_ESYNC);
++	err |= max96712_write_reg(priv, MAX96712_313_ADDR, MAX96712_313_ESYNC);
++	err |= max96712_write_reg(priv, MAX96712_314_ADDR, MAX96712_314_ESYNC);
++	err |= max96712_write_reg(priv, MAX96712_315_ADDR, MAX96712_315_ESYNC);
++
++	mutex_unlock(&priv->lock);
++
++	return err;
 +}
 +EXPORT_SYMBOL(max96712_setup_control);
 +
@@ -555,7 +640,7 @@ index 8e237eef..98172e74 100644
  	{ },
  };
  
-@@ -300,6 +659,7 @@ static struct i2c_driver max96712_i2c_driver = {
+@@ -300,6 +687,7 @@ static struct i2c_driver max96712_i2c_driver = {
  	.driver = {
  		.name = "max96712",
  		.owner = THIS_MODULE,
@@ -563,6 +648,17 @@ index 8e237eef..98172e74 100644
  	},
  	.probe = max96712_probe,
  	.remove = max96712_remove,
--- 
-2.43.0
-
+diff --git a/include/media/max9295.h b/include/media/max9295.h
+index c576e3e5..1acfe0fe 100644
+--- a/include/media/max9295.h
++++ b/include/media/max9295.h
+@@ -86,6 +86,9 @@ int max9295_sdev_unpair(struct device *dev, struct device *s_dev);
+ int max9295_setup_streaming(struct device *dev);
+ 
+ int max9295_init_settings(struct device *dev);
++
++int max9295_setup_gpio_tunneling(struct device *dev);
++
+ /** @} */
+ 
+ #endif  /* __MAX9295_H__ */
