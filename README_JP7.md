@@ -62,31 +62,29 @@ Note: dev_dbg() log support will not be enabled by default. If needed, run the `
 Following steps required:
 
 1. Copy build artifacts:
+
 If you build locally (native build on Jetson) use the following bash commands:
 ```
-sudo cp -r ./images/$(cat jetpack_version)/rootfs/lib/modules/*-tegra /lib/modules/
-sudo cp -r ./images/$(cat jetpack_version)/rootfs/boot/dtb /boot/dev/
-sudo cp -v ./images/$(cat jetpack_version)/rootfs/boot/vmlinu?-*-tegra /boot/dev/
+sudo cp -r images/$(cat jetpack_version)/rootfs/lib/modules/$(cat kernel_version) /lib/modules/
+sudo cp -r images/$(cat jetpack_version)/rootfs/boot/dtb /boot/dev/
+sudo cp -v images/$(cat jetpack_version)/rootfs/boot/vmlinu?-$(cat kernel_version) /boot/dev/
+sudo ln -sfT /boot/dev/vmlinu?-$(cat kernel_version) /boot/dev/Image
 ```
-Please take note of image file name displayed in last command, it will be used in later steps to update bootloader configuration.
-For example, if the copied kernel image file is `vmlinux-5.15.185-tegra`, the version part `5.15.185-tegra` will be used in later steps to update bootloader configuration.
-
 In case of crossbuild on external host prepare a tarball to ssh-copy to Jetson target.
 Example user 'nvidia' on Jetson with host name 'jetson.domain'
 ```
-tar czf rootfs.tar.gz -C images/$(cat jetpack_version)/rootfs boot lib
+tar czf rootfs.tar.gz -C images/$(cat jetpack_version)/rootfs boot lib kernel_version
 scp rootfs.tar.gz nvidia@jetson.domain:
 ```
 Log in into Jetson target, extract the tarball and install extracted files:
 ```
+rm -rf boot lib
 tar xf rootfs.tar.gz
-sudo cp -r ./lib/modules/* /lib/modules/
-sudo cp -r ./boot/dtb /boot/dev/
-sudo cp -v ./boot/vmlinu?-*-tegra /boot/dev/
+sudo cp -r lib/modules/$(cat kernel_version) /lib/modules/
+sudo cp -r boot/dtb /boot/dev/
+sudo cp -v boot/vmlinu?-$(cat kernel_version) /boot/dev/
+sudo ln -sfT /boot/dev/vmlinu?-$(cat kernel_version) /boot/dev/Image
 ```
-Please take note of image file name displayed in last command, it will be used in later steps to update bootloader configuration.
-For example, if the copied kernel image file is `vmlinux-5.15.185-tegra`, the version part `5.15.185-tegra` will be used in later steps to update bootloader configuration.
-
 2.	Enable and run depmod scan for "extra" & "kernel" modules
 ```
 # original file content: cat /etc/depmod.d/ubuntu.conf -- search updates ubuntu built-in
@@ -94,7 +92,8 @@ sudo sed -i 's/search updates/search extra updates kernel/g' /etc/depmod.d/ubunt
 # update driver cache
 sudo depmod
 # create initramfs file in /boot/ for new kernel
-sudo update-initramfs -ck <ver from previous step>
+sudo update-initramfs -u -k $(cat kernel_version)
+sudo ln -sfT /boot/initrd.img-$(cat kernel_version) /boot/dev/initrd
 ```
 3.	Run  $ `sudo /opt/nvidia/jetson-io/jetson-io.py`:
 	1.	Configure Jetson AGX CSI Connector
@@ -111,8 +110,8 @@ cat /boot/extlinux/extlinux.conf
 ----<CUT>----
 LABEL JetsonIO
     MENU LABEL Custom Header Config: <CSI Jetson RealSense Camera D457>
-    LINUX /boot/dev/vmlinux-<ver from previous step>
-    INITRD /boot/initrd.img-<ver from previous step>
+    LINUX /boot/dev/Image
+    INITRD /boot/dev/initrd
     APPEND ${cbootargs} root=...
     FDT /boot/dtb/kernel_tegra264-p4071-0000+p3834-0008-nv.dtb
     OVERLAYS /boot/dev/dtb/tegra264-camera-d4xx-overlay...dtbo

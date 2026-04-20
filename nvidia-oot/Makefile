@@ -69,7 +69,7 @@ hwpm: conftest
 		srctree.nvconftest=$(NVIDIA_CONFTEST) \
 		$(MAKECMDGOALS)
 
-nvidia-oot: conftest hwpm
+nvidia-oot: hwpm
 	@if [ ! -d "$(MAKEFILE_DIR)/nvidia-oot" ] ; then \
 		echo "Directory nvidia-oot is not found, exiting.."; \
 		false; \
@@ -89,7 +89,7 @@ nvidia-oot: conftest hwpm
 		KBUILD_EXTRA_SYMBOLS=$(MAKEFILE_DIR)/hwpm/drivers/tegra/hwpm/Module.symvers \
 		$(MAKECMDGOALS)
 
-nvgpu: conftest nvidia-oot
+nvgpu: nvidia-oot
 	if [ ! -d "$(MAKEFILE_DIR)/nvgpu" ] ; then \
 		echo "Directory nvgpu is not found, exiting.."; \
 		false; \

@@ -112,8 +112,9 @@ else
         # Building the Image with default defconfig
         make -C kernel
     fi
-	make -C kernel install
-    make modules modules_install
+    make modules
+    make -C kernel install
+    make modules_install
     D4XX_CMD_FILE="$BUILD_SRCS/nvidia-oot/drivers/media/i2c/.d4xx.o.cmd"
     if version_lt "$JETPACK_VERSION" "7.0"; then
         make dtbs
@@ -128,6 +129,7 @@ fi
 # save kernel version to file
 cd ${DEVDIR}
 ls "${INSTALL_MOD_PATH}/lib/modules/" > kernel_version
+cp -f kernel_version "${INSTALL_MOD_PATH}/"
 
 # Generate .vscode/compile_commands.json from the cached module build artefact
 echo "Generating .vscode/compile_commands.json..."

@@ -46,7 +46,7 @@ These are descriptiver steps. Bash commands to be issued follow:
 7. Configure the target.
 
 Assuming building for 6.2.2. One can also build for 6.2.1, 6.2, 6.1, 6.0 just replace the parameter to ./setup_workspace.sh script.
-Build version can be specified only once. It will be written to jetpack_version.txt file and used for later steps.
+Build version can be specified only once. It will be written to jetpack_version file and used for later steps.
 You can display the current version running any script below with -h option. Effective version will be also shown while running any script.
 ```
 git clone --branch dev --single-branch https://github.com/realsenseai/realsense_mipi_platform_driver.git
@@ -64,6 +64,7 @@ Note: dev_dbg() log support will not be enabled by default. If needed, run the `
 Following steps required:
 
 1. Copy build artifacts:
+
 If you build locally (native build on Jetson) use the following bash commands:
 ```
 sudo cp -r images/$(cat jetpack_version)/rootfs/lib/modules/$(cat kernel_version) /lib/modules/
@@ -71,26 +72,21 @@ sudo cp -r images/$(cat jetpack_version)/rootfs/boot/dtb /boot/dev/
 sudo cp -v images/$(cat jetpack_version)/rootfs/boot/vmlinu?-$(cat kernel_version) /boot/dev/
 sudo ln -sfT /boot/dev/vmlinu?-$(cat kernel_version) /boot/dev/Image
 ```
-Please take note of image file name displayed in last command, it will be used in later steps to update bootloader configuration.
-For example, if the copied kernel image file is `vmlinux-5.15.185-tegra`, the version part `5.15.185-tegra` will be used in later steps to update bootloader configuration.
-
 In case of crossbuild on external host prepare a tarball to ssh-copy to Jetson target.
 Example user 'nvidia' on Jetson with host name 'jetson.domain'
 ```
-tar czf rootfs.tar.gz -C images/$(cat jetpack_version)/rootfs boot lib ../../kernel_version
+tar czf rootfs.tar.gz -C images/$(cat jetpack_version)/rootfs boot lib kernel_version
 scp rootfs.tar.gz nvidia@jetson.domain:
 ```
 Log in into Jetson target, extract the tarball and install extracted files:
 ```
+rm -rf boot lib
 tar xf rootfs.tar.gz
-sudo cp -r lib/modules/* /lib/modules/
+sudo cp -r lib/modules/$(cat kernel_version) /lib/modules/
 sudo cp -r boot/dtb /boot/dev/
-sudo cp -v boot/vmlinu?-*-tegra /boot/dev/
-sudo ln -sfT /boot/dev/$(ls boot/vmlinu?-*-tegra) /boot/dev/Image
+sudo cp -v boot/vmlinu?-$(cat kernel_version) /boot/dev/
+sudo ln -sfT /boot/dev/vmlinu?-$(cat kernel_version) /boot/dev/Image
 ```
-Please take note of image file name displayed in last command, it will be used in later steps to update bootloader configuration.
-For example, if the copied kernel image file is `vmlinux-5.15.185-tegra`, the version part `5.15.185-tegra` will be used in later steps to update bootloader configuration.
-
 2.	Enable and run depmod scan for "extra" & "kernel" modules
 ```
 # original file content: cat /etc/depmod.d/ubuntu.conf -- search updates ubuntu built-in
@@ -137,8 +133,8 @@ sudo ln -sfT /boot/initrd.img-$(cat kernel_version) /boot/dev/initrd
  - Change the "LINUX" line to point to the newly copied /boot/**dev**/Image
  - Change the "INITRD" line to point to the newly copied /boot/**dev**/initrd
  - Add the "FDT" line pointing at the newly copied device tree "/boot/dev/dtb/tegra234-p3737-0000+p3701-0000-nv.dtb" (or tegra234-p3737-0000+p3701-0005-nv.dtb for production boards)
- - add the "OVERLAYS" line pointing to the required overlay as chosen in step 5 (e.g /boot/dev/dtb/tegra234-camera-d4xx-overlay.dtbo)
- - Select the new label as the default
+ - Add the "OVERLAYS" line pointing to the required overlay as chosen in step 5 (e.g /boot/dev/dtb/tegra234-camera-d4xx-overlay.dtbo)
+ - Change the "DEFAULT" entry to select the new label as the default
 
 The result should be:
 
