@@ -26,9 +26,7 @@
 						reg = <0>;
 						tegra_vi_depth: endpoint {
 							status = "okay";
-							vc-id = <0>;
 							port-index = <0>;
-							bus-width = <2>;
 							remote-endpoint = <&csi_depth_source>;
 						};
 					};
@@ -37,9 +35,7 @@
 						reg = <1>;
 						tegra_vi_rgb: endpoint {
 							status = "okay";
-							vc-id = <1>;
-							port-index = <0>;
-							bus-width = <2>;
+							port-index = <1>;
 							remote-endpoint = <&csi_rgb_source>;
 						};
 					};
@@ -48,9 +44,7 @@
 						reg = <2>;
 						tegra_vi_ir: endpoint {
 							status = "okay";
-							vc-id = <2>;
-							port-index = <0>;
-							bus-width = <2>;
+							port-index = <2>;
 							remote-endpoint = <&csi_ir_source>;
 						};
 					};
@@ -59,9 +53,7 @@
 						reg = <3>;
 						tegra_vi_imu: endpoint {
 							status = "okay";
-							vc-id = <3>;
-							port-index = <0>;
-							bus-width = <2>;
+							port-index = <3>;
 							remote-endpoint = <&csi_imu_source>;
 						};
 					};
@@ -89,8 +81,7 @@
 							status = "okay";
 							pcl_id = "v4l2_sensor";
 							devname = "DS5 mux 9-001c";
-							// proc-device-tree = "/proc/device-tree/bus@0/i2c@810c6a0000/ds5@1c";
-							sysfs-device-tree = "/sys/firmware/devicetree/base/bus@0/i2c@810c6a0000/ds5@1c";
+							sysfs-device-tree = "/sys/firmware/devicetree/base/bus@0/i2c@810c6a0000/ds5@10";
 						};
 					};
 					module1 {
@@ -102,8 +93,7 @@
 							status = "okay";
 							pcl_id = "v4l2_sensor";
 							devname = "DS5 mux 9-001a";
-							// proc-device-tree = "/proc/device-tree/bus@0/i2c@810c6a0000/ds5@1a";
-							sysfs-device-tree = "/sys/firmware/devicetree/base/bus@0/i2c@810c6a0000/ds5@1a";
+							sysfs-device-tree = "/sys/firmware/devicetree/base/bus@0/i2c@810c6a0000/ds5@10";
 						};
 					};
 					module2 {
@@ -115,8 +105,7 @@
 							status = "okay";
 							pcl_id = "v4l2_sensor";
 							devname = "DS5 mux 9-001d";
-							// proc-device-tree = "/proc/device-tree/bus@0/i2c@810c6a0000/ds5@1d";
-							sysfs-device-tree = "/sys/firmware/devicetree/base/bus@0/i2c@810c6a0000/ds5@1d";
+							sysfs-device-tree = "/sys/firmware/devicetree/base/bus@0/i2c@810c6a0000/ds5@10";
 						};
 					};
 					module3 {
@@ -128,8 +117,7 @@
 							status = "okay";
 							pcl_id = "v4l2_sensor";
 							devname = "DS5 mux 9-001b";
-							// proc-device-tree = "/proc/device-tree/bus@0/i2c@810c6a0000/ds5@1b";
-							sysfs-device-tree = "/sys/firmware/devicetree/base/bus@0/i2c@810c6a0000/ds5@1b";
+							sysfs-device-tree = "/sys/firmware/devicetree/base/bus@0/i2c@810c6a0000/ds5@10";
 						};
 					};
 				};
@@ -145,12 +133,13 @@
 								status = "okay";
 								#address-cells = <1>;
 								#size-cells = <0>;
+								port-index = <0>;
 								port@0 {
 									status = "okay";
 									reg = <0>;
 									csi_depth_sink: endpoint@0 {
 										status = "okay";
-										port-index = <0>;
+										vc-id = <0>;
 										remote-endpoint = <&deserializer_source_depth>;
 									};
 									csi_depth_source: endpoint@1 {
@@ -159,81 +148,49 @@
 										remote-endpoint = <&tegra_vi_depth>;
 									};
 								};
-							};
-						};
-						channel@1 {
-							status = "okay";
-							reg = <1>;
-							ports {
-								status = "okay";
-								#address-cells = <1>;
-								#size-cells = <0>;
-								port@0 {
+								port@1 {
 									status = "okay";
-									reg = <0>;
+									reg = <1>;
 									csi_rgb_sink: endpoint {
 										status = "okay";
-										port-index = <0>;
-										bus-width = <2>;
+										port-index = <2>;
+										vc-id = <1>;
 										remote-endpoint = <&deserializer_source_rgb>;
 									};
 									csi_rgb_source: endpoint@1 {
 										status = "okay";
+										port-index = <3>;
 										remote-endpoint = <&tegra_vi_rgb>;
 									};
 								};
-							};
-						};
-						channel@2 {
-							status = "okay";
-							reg = <2>;
-							ports {
-								status = "okay";
-								#address-cells = <1>;
-								#size-cells = <0>;
-								port@0 {
+								port@2 {
 									status = "okay";
-									reg = <0>;
-									d4xx_csi_in2: endpoint {
+									reg = <2>;
+									csi_ir_sink: endpoint {
 										status = "okay";
-										port-index = <0>;
-										bus-width = <2>;
-										remote-endpoint = <&ds5_2_out>;
+										port-index = <2>;
+										vc-id = <2>;
+										remote-endpoint = <&deserializer_source_ir>;
+									};
+									csi_ir_source: endpoint@1 {
+										status = "okay";
+										port-index = <3>;
+										remote-endpoint = <&tegra_vi_ir>;
 									};
 								};
-								port@1 {
+								port@3 {
 									status = "okay";
-									reg = <1>;
-									d4xx_csi_out2: endpoint {
+									reg = <3>;
+									csi_imu_sink: endpoint@0 {
 										status = "okay";
-										remote-endpoint = <&d4xx_vi_in2>;
+										port-index = <2>;
+										vc-id = <3>;
+										remote-endpoint = <&deserializer_source_imu>;
 									};
-								};
-							};
-						};
-						channel@3 {
-							status = "okay";
-							reg = <3>;
-							ports {
-								status = "okay";
-								#address-cells = <1>;
-								#size-cells = <0>;
-								port@0 {
-									status = "okay";
-									reg = <0>;
-									d4xx_csi_in3: endpoint@6 {
+									csi_imu_source: endpoint@1 {
 										status = "okay";
-										port-index = <0>;
-										bus-width = <2>;
-										remote-endpoint = <&ds5_3_out>;
-									};
-								};
-								port@1 {
-									status = "okay";
-									reg = <1>;
-									d4xx_csi_out3: endpoint@7 {
-										status = "okay";
-										remote-endpoint = <&d4xx_vi_in3>;
+										port-index = <3>;
+										remote-endpoint = <&tegra_vi_imu>;
 									};
 								};
 							};
@@ -296,7 +253,6 @@
 						status = "okay";
 						compatible = "maxim,max9295";
 						reg = <0x40>;
-						maxim,gmsl-dser-device = <&dser>;
 						ports {
 							#address-cells = <1>;
 							#size-cells = <0>;
@@ -341,28 +297,23 @@
 							};
 						};
 					};
-				};
 
-				sensor: ds5@10 {
-					status = "okay";
-					def-addr = <0x10>;
-					reg = <0x1d>;
-					override_reg = <0x1a>;
-					compatible = "intel,d4xx";
-					use_sensor_mode_id = "true";
-					nvidia,gmsl-ser-device = <&ser_a>;
-					nvidia,gmsl-dser-device = <&dser>;
-					ports {
-						#address-cells = <1>;
-						#size-cells = <0>;
+					sensor: ds5@10 {
+						status = "okay";
+						reg = <0x10>;
+						compatible = "intel,d4xx";
+						use_sensor_mode_id = "true";
+						ports {
+							#address-cells = <1>;
+							#size-cells = <0>;
 
-						port@0 {
-							reg = <0>;
-							sensor_depth: endpoint {
-								vc-id = <3>;
-								port-index = <3>;
-								bus-width = <2>;
-								remote-endpoint = <&serializer_sink_depth>;
+							port@0 {
+								reg = <0>;
+								sensor_depth: endpoint {
+									port-index = <0>;
+									bus-width = <2>;
+									remote-endpoint = <&serializer_sink_depth>;
+								};
 								mode {
 									pixel_t = "grey_y16";
 									num_lanes = "2";
@@ -373,16 +324,16 @@
 									mclk_khz = "24000";
 									pix_clk_hz = "74250000";
 									line_length = "1280"; /* 2200 */
-									embedded_metadata_height = "0";
+									embedded_metadata = "true";
 								};
 							};
-						};
-						port@1 {
-							reg = <1>;
-							sensor_rgb: endpoint {
-								vc-id = <1>;
-								port-index = <1>;
-								remote-endpoint = <&serializer_sink_rgb>;
+							port@1 {
+								reg = <1>;
+								sensor_rgb: endpoint {
+									port-index = <1>;
+									bus-width = <2>;
+									remote-endpoint = <&serializer_sink_rgb>;
+								};
 								mode {
 									pixel_t = "grey_y16";
 									num_lanes = "2";
@@ -393,16 +344,16 @@
 									mclk_khz = "24000";
 									pix_clk_hz = "74250000";
 									line_length = "1280"; /* 2200 */
-									embedded_metadata_height = "1";
+									embedded_metadata = "true";
 								};
 							};
-						};
-						port@2 {
-							reg = <2>;
-							sensor_ir: endpoint {
-								vc-id = <2>;
-								port-index = <2>;
-								remote-endpoint = <&serializer_sink_ir>;
+							port@2 {
+								reg = <2>;
+								sensor_ir: endpoint {
+									port-index = <2>;
+									bus-width = <2>;
+									remote-endpoint = <&serializer_sink_ir>;
+								};
 								mode {
 									pixel_t = "grey_y16";
 									num_lanes = "2";
@@ -413,17 +364,17 @@
 									mclk_khz = "24000";
 									pix_clk_hz = "74250000";
 									line_length = "1280"; /* 2200 */
-									embedded_metadata_height = "1";
+									embedded_metadata = "true";
 								};
 							};
-						};
-						port@3 {
-							reg = <3>;
-							sensor_imu: endpoint {
-								vc-id = <3>;
-								port-index = <3>;
-								remote-endpoint = <&serializer_sink_imu>;
-								/* mode0: Y8, mode1: depth D16 */
+							port@3 {
+								reg = <3>;
+								sensor_imu: endpoint {
+									port-index = <3>;
+									bus-width = <2>;
+									remote-endpoint = <&serializer_sink_imu>;
+									/* mode0: Y8, mode1: depth D16 */
+								};
 								mode {
 									pixel_t = "grey_y16";
 									num_lanes = "2";
@@ -434,7 +385,6 @@
 									mclk_khz = "24000";
 									pix_clk_hz = "74250000";
 									line_length = "1280"; /* 2200 */
-									embedded_metadata_height = "1";
 								};
 							};
 						};
