@@ -190,6 +190,13 @@ enum ds5_mux_pad {
 	DS5_MUX_PAD_COUNT,
 };
 
+enum ds5_pad {
+	DS5_PAD_DEPTH,
+	DS5_PAD_RGB,
+	DS5_PAD_IR,
+	DS5_PAD_IMU,
+	DS5_PAD_COUNT,
+};
 #define DS5_N_CONTROLS			8
 
 #define DS5_MAX_STREAMS	4
