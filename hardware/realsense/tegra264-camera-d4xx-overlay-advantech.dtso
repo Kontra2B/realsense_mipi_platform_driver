@@ -303,6 +303,7 @@
 						reg = <0x10>;
 						compatible = "intel,d4xx";
 						use_sensor_mode_id = "true";
+						num_lanes = "2";
 						ports {
 							#address-cells = <1>;
 							#size-cells = <0>;
