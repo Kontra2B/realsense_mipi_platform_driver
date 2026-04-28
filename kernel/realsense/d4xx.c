@@ -4483,7 +4483,7 @@ static int ds5_probe(struct i2c_client *c
 
 	if (!state) return -ENOMEM;
 
-	dev_warn(&c->dev, "Probing driver for D4xx\n");
+	dev_warn(&c->dev, "[robing driver for D4xx\n");
 
 	mutex_init(&state->lock);
 	state->client = c;
@@ -4493,13 +4493,15 @@ static int ds5_probe(struct i2c_client *c
 	state->vcc = devm_regulator_get(&c->dev, "vcc");
 	if (IS_ERR(state->vcc)) {
 		ret = PTR_ERR(state->vcc);
-		dev_warn(&c->dev, "failed %d to get vcc regulator\n", ret);
+		dev_warn(&c->dev, "%s: failed %d to get vcc regulator\n",
+				__func__, ret);
 		return ret;
 	}
 	if (state->vcc) {
 		ret = regulator_enable(state->vcc);
 		if (ret < 0) {
-			dev_warn(&c->dev, "failed %d to enable the vcc regulator\n", ret);
+			dev_warn(&c->dev, "%s: failed %d to enable the vcc regulator\n",
+					__func__, ret);
 			return ret;
 		}
 	}
@@ -4507,7 +4509,7 @@ static int ds5_probe(struct i2c_client *c
 	state->regmap = devm_regmap_init_i2c(c, &ds5_regmap_config);
 	if (IS_ERR(state->regmap)) {
 		ret = PTR_ERR(state->regmap);
-		dev_err(&c->dev, "regmap init failed: %d\n", ret);
+		dev_err(&c->dev, "%s: regmap init failed: %d\n", __func__, ret);
 		goto e_regulator;
 	}
 
@@ -4517,15 +4519,15 @@ static int ds5_probe(struct i2c_client *c
 	ret = ds5_read(state, DS5_FW_VERSION, &state->fw_version);
 	if (ret < 0) {
 		dev_err(&c->dev,
-			"%s(): cannot communicate with D4XX: %d on addr: 0x%x\n",
+			"%s: cannot communicate with D4XX: %d on addr: 0x%x\n",
 			__func__, ret, c->addr);
 		goto e_regulator;
 	}
 
 #ifdef CONFIG_OF
 	for (int id = DS5_PAD_DEPTH; id < DS5_PAD_COUNT; id++) {
-		if (ret) ds5_sensor_init(id, state);
-				goto e_regulator;
+		ret = ds5_sensor_init(id, state);
+		if (ret) goto e_regulator;
 	}
 #else
 	state->is_depth = 1;
@@ -4567,7 +4569,7 @@ static int ds5_probe(struct i2c_client *c
 		rec_state = 0;
 
 	if (rec_state == DS5_DFU_MAGIC_LSW) {
-		dev_info(&c->dev, "%s(): D4XX recovery state\n", __func__);
+		dev_info(&c->dev, "%s: D4XX recovery state\n", __func__);
 		state->dfu_dev.dfu_state_flag = DS5_DFU_RECOVERY;
 		/* Override I2C drvdata with state for use in remove function */
 		i2c_set_clientdata(c, state);
