@@ -310,6 +310,7 @@
 
 							port@0 {
 								reg = <0>;
+								embedded_metadata = "true";
 								sensor_depth: endpoint {
 									port-index = <0>;
 									bus-width = <2>;
@@ -324,12 +325,12 @@
 										mclk_khz = "24000";
 										pix_clk_hz = "74250000";
 										line_length = "1280"; /* 2200 */
-										embedded_metadata = "true";
 									};
 								};
 							};
 							port@1 {
 								reg = <1>;
+								embedded_metadata = "true";
 								sensor_rgb: endpoint {
 									port-index = <1>;
 									bus-width = <2>;
@@ -344,12 +345,12 @@
 										mclk_khz = "24000";
 										pix_clk_hz = "74250000";
 										line_length = "1280"; /* 2200 */
-										embedded_metadata = "true";
 									};
 								};
 							};
 							port@2 {
 								reg = <2>;
+								embedded_metadata = "true";
 								sensor_ir: endpoint {
 									port-index = <2>;
 									bus-width = <2>;
@@ -364,7 +365,6 @@
 										mclk_khz = "24000";
 										pix_clk_hz = "74250000";
 										line_length = "1280"; /* 2200 */
-										embedded_metadata = "true";
 									};
 								};
 							};
