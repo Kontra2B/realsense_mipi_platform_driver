@@ -37,6 +37,8 @@ if [[ -n "$2" ]]; then
     BUILD_SRCS=$(realpath $2)
 fi
 
+export LOCALVERSION=-tegra
+
 if [[ $(uname -m) == aarch64 ]]; then
     echo
     echo Native build
@@ -54,7 +56,6 @@ else
     export CROSS_COMPILE
 fi
 
-export LOCALVERSION=-tegra
 TEGRA_KERNEL_OUT="$DEVDIR/images/${JP_INPUT_VERSION}"	# ./images/5.1.6
 export INSTALL_MOD_PATH=${TEGRA_KERNEL_OUT}/rootfs
 export INSTALL_PATH=${INSTALL_MOD_PATH}/boot

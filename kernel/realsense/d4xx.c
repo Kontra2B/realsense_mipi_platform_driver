@@ -33,7 +33,7 @@
 #include <linux/mutex.h>
 #include <media/media-entity.h>
 #include <media/v4l2-ctrls.h>
-#include <media/v4l2-device.h>
+#include <media/v4l2-async.h>
 #include <media/v4l2-subdev.h>
 #include <media/v4l2-mediabus.h>
 
@@ -113,15 +113,15 @@
 #define DS5_RGB_CONTROL_BASE		0x4200
 #define DS5_MANUAL_EXPOSURE_LSB		0x0000
 #define DS5_MANUAL_EXPOSURE_MSB		0x0002
-#define DS5_MANUAL_GAIN			0x0004
-#define DS5_LASER_POWER			0x0008
+#define DS5_MANUAL_GAIN				0x0004
+#define DS5_LASER_POWER				0x0008
 #define DS5_AUTO_EXPOSURE_MODE		0x000C
 #define DS5_EXPOSURE_ROI_TOP		0x0010
 #define DS5_EXPOSURE_ROI_LEFT		0x0014
 #define DS5_EXPOSURE_ROI_BOTTOM		0x0018
 #define DS5_EXPOSURE_ROI_RIGHT		0x001C
 #define DS5_MANUAL_LASER_POWER		0x0024
-#define DS5_PWM_FREQUENCY		0x0028
+#define DS5_PWM_FREQUENCY			0x0028
 #define DS5_CAMERA_SYNC_MODE		0x002C
 
 #define DS5_DEPTH_CONFIG_STATUS		0x4800
@@ -134,12 +134,12 @@
 #define DS5_STATUS_INVALID_RES		0x4
 #define DS5_STATUS_INVALID_FPS		0x8
 
-#define MIPI_LANE_RATE			1000
+#define MIPI_LANE_RATE				1000
 
-#define MAX_DEPTH_EXP			200000
-#define MAX_RGB_EXP			10000
-#define DEF_DEPTH_EXP			33000
-#define DEF_RGB_EXP			1660
+#define MAX_DEPTH_EXP				200000
+#define MAX_RGB_EXP					10000
+#define DEF_DEPTH_EXP				33000
+#define DEF_RGB_EXP					1660
 
 enum ds5_pad {
 	DS5_PAD_DEPTH,
@@ -359,8 +359,6 @@ struct ds5_format {
 };
 
 struct ds5_sensor {
-	struct v4l2_subdev sd;
-	struct media_pad pad;
 	struct v4l2_mbus_framefmt format;
 	struct v4l2_ctrl_handler handler;
 	struct {
@@ -384,7 +382,6 @@ struct ds5_sensor {
 	int port_index;
 	int vc_id;
 	bool metadata_enabled;
-	struct list_head list;
 };
 
 #ifdef CONFIG_TEGRA_CAMERA_PLATFORM
@@ -419,11 +416,14 @@ enum {
 };
 
 struct ds5 {
-	struct list_head sensors;
+	struct i2c_client *client;
+	struct v4l2_subdev camera;
+	struct media_pad pad[DS5_PAD_COUNT];
+	struct ds5_sensor sensor[DS5_PAD_COUNT];
+	struct v4l2_async_notifier notiier;
 	struct ds5_ctrls ctrls;
 	struct ds5_dfu_dev dfu_dev;
 	bool power;
-	struct i2c_client *client;
 	/* All below pointers are used for writing, cannot be const */
 	struct mutex lock;
 	struct regmap *regmap;
@@ -450,7 +450,7 @@ static inline u16 ds5_dev_type(struct ds5 *state, u16 dev_type)
 {
 	if (dev_type == 0 && state->cached_device_type != 0) {
 		dev_info(&state->client->dev,
-			"%s(): device type register returned 0, using cached type 0x%x\n",
+			"%s: device type register returned 0, using cached type 0x%x\n",
 			__func__, state->cached_device_type);
 		dev_type = state->cached_device_type;
 	}
@@ -1290,7 +1290,7 @@ static void ds5_sensor_format_init(struct ds5_sensor *sensor)
 	if (sensor->config.format)
 		return;
 
-	dev_dbg(sensor->sd.dev, "%s(): on pad %u\n", __func__, sensor->port_index);
+	dev_dbg(sensor->sd.dev, "%s: on pad %u\n", __func__, sensor->port_index);
 
 	ffmt = &sensor->format;
 	*ffmt = ds5_mbus_framefmt_template;
@@ -1738,7 +1738,20 @@ static int ds5_sensor_g_frame_interval(struct v4l2_subdev *sd,
 
 	return 0;
 }
-static u16 __ds5_probe_framerate(const struct ds5_resolution *res, u16 target);
+
+static u16 __ds5_probe_framerate(const struct ds5_resolution *res, u16 target)
+{
+	int i;
+	u16 framerate;
+
+	for (i = 0; i < res->n_framerates; i++) {
+		framerate = res->framerates[i];
+		if (target <= framerate)
+			return framerate;
+	}
+
+	return res->framerates[res->n_framerates - 1];
+}
 
 static int ds5_sensor_s_frame_interval(struct v4l2_subdev *sd,
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 8, 0)
@@ -1764,6 +1777,196 @@ static int ds5_sensor_s_frame_interval(struct v4l2_subdev *sd,
 }
 
 int ds5_sensor_s_stream(struct v4l2_subdev*, int);
+int ds5_sensor_s_stream(struct v4l2_subdev* sd, int on) {
+	struct ds5 *state = v4l2_get_subdevdata(sd);
+	u16 streaming, status;
+	int ret = 0;
+	unsigned int i = 0, ds5_config_retries = MAX_DS5_CONFIG_RETRIES;
+	unsigned long timeout, ts;
+	int restore_val = 0;
+	u16 stream_cmd;
+	u16 stream_id, vc_id;
+	struct ds5_sensor *sensor = container_of(sd, struct ds5_sensor, sd);
+	u16 expected_streaming_state;
+	bool ds5_config_done = !on; /* for stop, skip config */
+	bool reset_invalidated = false;
+	int cur_ds5 = atomic_read(ds5_get_reset_gen(state));
+
+	/* Lazy invalidation after HW or deserializer reset.
+	 * Detect gen-counter bumps, clear stale streaming/config/pipe
+	 * state, then update refs.  Must run before the duplicate-call
+	 * guard so a reset-killed stream is not mistaken for "already off".
+	 */
+	if (state->reset_ref_ds5 != cur_ds5) {
+		ds5_invalidate_sensor(state, sensor);
+		sensor->streaming = false;
+		reset_invalidated = true;
+		state->reset_ref_ds5 = cur_ds5;
+	}
+
+	// spare duplicate calls
+	if (sensor->streaming == on)
+		return 0;
+	dev_dbg(&state->client->dev, "s_stream for stream %s, vc:%d, SENSOR=%s on = %d\n",
+			sensor->sd.name, vc_id, ds5_get_sensor_name(sensor), on);
+
+	if (on) {
+		stream_cmd = (DS5_STREAM_START | sensor->port_index);
+		expected_streaming_state = DS5_STREAM_STREAMING;
+		status = 0;
+	} else {
+		stream_cmd = (DS5_STREAM_STOP | sensor->port_index);
+		expected_streaming_state = DS5_STREAM_IDLE;
+		status = DS5_STATUS_STREAMING;
+	}
+
+	/* Verify stream is in the expected state before issuing command */
+	ts = jiffies;
+	for (timeout = ts + msecs_to_jiffies(DS5_START_MAX_TIME), i = 0;
+			time_before(jiffies, timeout); i++, msleep_range(i*DS5_START_POLL_TIME))
+	{
+		ret = ds5_read(state, sensor->status_reg, &status);
+		if ((ret >= 0) && (on == !(status & DS5_STATUS_STREAMING))) {
+			break;
+		}
+	}
+	if (on == !(status & DS5_STATUS_STREAMING))
+	{
+		dev_dbg(&state->client->dev,
+			"stream %d in expected state, toggling to %d (status: 0x%04x) %dms\n",
+			stream_id, on, status, jiffies_to_msecs(jiffies - ts));
+	} else {
+		/* If state was invalidated by reset-generation bump and FW still
+		 * reports this stream as active, force a stop to guarantee next
+		 * start goes through full reconfiguration.
+		 */
+		if (on && reset_invalidated && (status & DS5_STATUS_STREAMING)) {
+			dev_warn(&state->client->dev,
+				"stream %d reports streaming after reset invalidation (status: 0x%04x), forcing stop and reconfigure\n",
+				sensor->port_index, status);
+
+			ret = ds5_write(state, DS5_START_STOP_STREAM,
+					DS5_STREAM_STOP | sensor->port_index);
+			if (ret < 0)
+				dev_warn(&state->client->dev,
+					"stream %d forced stop write failed (%d), continuing with reconfigure\n",
+					sensor->port_index, ret);
+
+			sensor->streaming = false;
+		} else {
+			/* After HW reset the FW reboots and all streams return to
+			 * idle.  If VI error recovery tries to stop a stream that
+			 * is already stopped (or start one already started), treat
+			 * it as a no-op so the upper layer can proceed with
+			 * restart instead of getting stuck in an EBUSY loop.
+			 */
+			dev_warn(&state->client->dev,
+				"stream %d in %d state already (status: 0x%04x) %dms, treating as no-op\n",
+				sensor->port_index, on, status, jiffies_to_msecs(jiffies - ts));
+			sensor->streaming = on;
+			return 0;
+		}
+	}
+
+	restore_val = sensor->streaming;
+	sensor->streaming = on;
+
+	/*
+	 * Execute command, poll state (retry if necessary) and poll completion.
+	 * For start, also confirm config status is valid and not rejected by FW, otherwise retry.
+	 */
+	ts = jiffies;
+	streaming = ~expected_streaming_state; /* force initial toggle */
+	for (timeout = ts + msecs_to_jiffies(DS5_START_MAX_TIME), i = 0;
+			time_before(jiffies, timeout); i++, msleep_range(i*DS5_START_POLL_TIME))
+	{
+		if (!ds5_config_done) {
+			ret = ds5_configure(state);
+			if (ret < 0) {
+				if (ret == -ENOSR) {
+					/* No recovery can help if no resources are available */
+					return ret;
+				}
+				dev_warn(&state->client->dev, "stream %d config failed, retry %d, %dms\n",
+					sensor->port_index, i, jiffies_to_msecs(jiffies - ts));
+				continue;
+			}
+			ds5_config_done = true;
+		}
+
+		if (streaming != expected_streaming_state) {
+			ret = ds5_write(state, DS5_START_STOP_STREAM, stream_cmd);
+			if (ret < 0) {
+				dev_warn(&state->client->dev, "stream %d cmd 0x%x write failed, retry %d, %dms\n",
+					sensor->port_index, stream_cmd, i, jiffies_to_msecs(jiffies - ts));
+			}
+		}
+
+		ret = ds5_read(state, sensor->stream_status, &streaming);
+		if (ret < 0) {
+			dev_warn(&state->client->dev,
+				"stream %d status i2c read failed (%d), retry %u, %dms\n",
+				sensor->port_index, ret, i, jiffies_to_msecs(jiffies - ts));
+		}
+
+		if (streaming != expected_streaming_state) {
+			dev_warn(&state->client->dev, "stream %d status not as expected (%d != %d), retry %d, %dms\n",
+				sensor->port_index, streaming, expected_streaming_state, i, jiffies_to_msecs(jiffies - ts));
+			continue;
+		}
+
+		ret = ds5_read(state, sensor->status_reg, &status);
+		if (ret < 0) {
+			dev_warn(&state->client->dev,
+				"stream %d config status i2c read failed (%d), retry %u, %dms\n",
+				sensor->port_index, ret, i, jiffies_to_msecs(jiffies - ts));
+			continue;
+		}
+
+		if (on && (status & (DS5_STATUS_INVALID_DT |
+								DS5_STATUS_INVALID_RES |
+								DS5_STATUS_INVALID_FPS)))
+		{
+			dev_warn(&state->client->dev,
+				"stream %d config rejected, status 0x%04x, retry %u, %dms\n",
+				sensor->port_index, status, i, jiffies_to_msecs(jiffies - ts));
+			if (ds5_config_retries > 0) {
+				ds5_config_retries--;
+				ds5_config_done = false;
+				ds5_config_cache_clear(sensor);
+			} else {
+				dev_warn(&state->client->dev,
+					"stream %d config failed after %d retries, aborting, %dms\n",
+					sensor->port_index, i, jiffies_to_msecs(jiffies - ts));
+				break;
+			}
+			continue;
+		}
+
+		if (!on == !(status & DS5_STATUS_STREAMING))
+		{
+			dev_info(&state->client->dev,
+				"stream %d toggle ok to %d in %dms, retries %d\n",
+				sensor->port_index, on, jiffies_to_msecs(jiffies - ts), i);
+			break;
+		}
+	}
+
+	if (on == !(status & DS5_STATUS_STREAMING))
+	{
+		dev_warn(&state->client->dev,
+			"stream %d toggle to %d timeout in %dms, retries %d\n",
+			sensor->port_index, on, jiffies_to_msecs(jiffies - ts), i);
+
+		if (streaming == expected_streaming_state) { /* try to toggle stream back on timeout  */
+			ds5_write(state, DS5_START_STOP_STREAM,
+				(on ? DS5_STREAM_STOP : DS5_STREAM_START) | sensor->port_index);
+		}
+		sensor->streaming = restore_val;
+		ret = -EAGAIN;
+	}
+	return ret;
+}
 
 static const struct v4l2_subdev_video_ops ds5_sensor_video_ops = {
 #if LINUX_VERSION_CODE < KERNEL_VERSION(6, 8, 0)
@@ -3104,11 +3307,6 @@ static const struct v4l2_subdev_internal_ops ds5_sensor_internal_ops = {
 	.close = ds5_mux_close,
 };
 
-static void ds5_init_ds5_dev(struct ds5 *state)
-{
-	state->cached_device_type = DS5_DEVICE_TYPE_UNKNOWN;
-}
-
 #ifdef CONFIG_VIDEO_D4XX_SERDES
 
 /*
@@ -3158,29 +3356,11 @@ static int ds5_board_setup(struct ds5 *state)
 	};
 
 	i2c_info_ser.addr = pdata->subdev_info[0].ser_alias; //0x42, 0x44, 0x62, 0x64
-	state->ser_i2c = i2c_new_client_device(adapter, &i2c_info_ser);
 
 	i2c_info_des.addr = pdata->subdev_info[0].board_info.addr; //0x48, 0x4a, 0x68, 0x6a
 
 	/* look for already registered max9296, use same context if found */
 	ds5_init_global_slots_once();
-	for (i = 0; i < MAX_DS5_NUM; i++) {
-		struct ds5 *primary;
-
-		mutex_lock(&ds5_inited[i].lock);
-		primary = ds5_inited[i].ds5_primary;
-		if (primary && primary->dser_i2c) {
-			dev_info(dev, "MAX9296 found device on %d@0x%x\n",
-				primary->dser_i2c->adapter->nr, primary->dser_i2c->addr);
-			if (bus == primary->dser_i2c->adapter->nr
-				&& primary->dser_i2c->addr == i2c_info_des.addr) {
-				dev_info(dev, "MAX9296 AGGREGATION found device on 0x%x\n", i2c_info_des.addr);
-				state->dser_i2c = primary->dser_i2c;
-				state->aggregated = 1;
-			}
-		}
-		mutex_unlock(&ds5_inited[i].lock);
-	}
 	if (state->aggregated)
 		suffix += 4;
 	dev_info(dev, "Init SerDes %c on %d@0x%x<->%d@0x%x\n",
@@ -3277,6 +3457,14 @@ static int ds5_ctrl_init(struct ds5_sensor *sensor, struct ds5 *state)
 		v4l2_err(sd, "cannot init ctrl handler (%d)\n", ret);
 		return ret;
 	}
+
+	ret = v4l2_device_register(sensor->sd.dev, sensor->sd.v4l2_dev);
+	if (ret) {
+		v4l2_err(sd, "%s: cannot register video device\n", __func__);
+		return ret;
+	}
+
+	list_add_tail(&sensor->list, &state->sensors);
 
 	if (sensor->port_index == DS5_PAD_DEPTH || sensor->port_index == DS5_PAD_IR) {
 		ctrls->laser_power = v4l2_ctrl_new_custom(hdl,
@@ -3546,8 +3734,7 @@ static int ds5_parse_cam(struct i2c_client *client, struct ds5 *state)
 	if (ret < 0)
 		return ret;
 
-	list_for_each_entry(sensor, &state->sensors, list)
-		ds5_sensor_format_init(sensor);
+	ds5_sensor_format_init(sensor);
 
 	return 0;
 }
@@ -3925,18 +4112,16 @@ static void ds5_adjust_sync_mode_control(struct i2c_client *client, struct ds5 *
 		break;
 	}
 }
-static int ds5_sensor_init(struct i2c_client *c, struct ds5 *state,
-		struct ds5_sensor *sensor, const struct v4l2_subdev_ops *ops)
+static int ds5_sensor_init(struct i2c_client *c, struct ds5 *state)
 {
-	struct v4l2_subdev *sd = &sensor->sd;
+	struct v4l2_subdev *sd = &sensor->camera;
 	struct media_entity *entity = &sensor->sd.entity;
-	struct media_pad *pad = &sensor->pad;
+	struct media_pad *pad = &state->pad;
 	dev_t *dev_num = &state->client->dev.devt;
 #ifndef CONFIG_OF
 	struct d4xx_pdata *dpdata = c->dev.platform_data;
 	char suffix = dpdata->suffix;
 #endif
-	v4l2_i2c_subdev_init(sd, c, ops);
 	// See tegracam_v4l2.c tegracam_v4l2subdev_register()
 	// Set owner to NULL so we can unload the driver module
 	sd->owner = NULL;
@@ -4003,15 +4188,14 @@ static int ds5_hw_init(struct i2c_client *c, struct ds5 *state)
 
 static int ds5_v4l_init(struct i2c_client *c, struct ds5 *state)
 {
-	struct ds5_sensor *sensor;
 	int ret;
 
 	ret = ds5_parse_cam(c, state);
+	v4l2_i2c_subdev_init(&state->camera, c, &ds5_subdev_ops);
 	if (ret < 0)
 		return ret;
 
-	list_for_each_entry(sensor, &state->sensors, list)
-		ret = ds5_sensor_init(c, state, sensor, &ds5_subdev_ops);
+	ret = ds5_sensor_init(c, state);
 
 	/* Adjust sync_mode control range based on device type - must be done
 	 * after ds5_mux_init() creates the control */
@@ -4113,7 +4297,7 @@ static int ds5_chrdev_init(struct i2c_client *c, struct ds5 *state)
 #else
 		*ds5_class = class_create(DS5_DRIVER_NAME_CLASS);
 #endif
-		dev_warn(&state->client->dev, "%s() class_create\n", __func__);
+		dev_warn(&state->client->dev, "%s: class create\n", __func__);
 		if (IS_ERR(*ds5_class)) {
 			dev_err(&c->dev, "Could not create class device\n");
 			unregister_chrdev_region(0, 1);
@@ -4298,19 +4482,18 @@ static int ds5_probe(struct i2c_client *c
 	int ret, err = 0;
 	struct ds5_sensor *sensor;
 #ifdef CONFIG_OF
-	struct device_node *mode, *ports, *port;
+	struct device_node *mode, *endpoint, *ports, *port;
 	u32 pad;
 	const char *str;
 #endif
 	if (!state)
 		return -ENOMEM;
 
-	mutex_init(&state->lock);
-	INIT_LIST_HEAD(&state->sensors);
-
-	state->client = c;
-
 	dev_warn(&c->dev, "Probing driver for D4xx\n");
+
+	mutex_init(&state->lock);
+	state->client = c;
+	state->cached_device_type = DS5_DEVICE_TYPE_UNKNOWN;
 	state->variant = ds5_variants + id->driver_data;
 #ifdef CONFIG_OF
 	state->vcc = devm_regulator_get(&c->dev, "vcc");
@@ -4319,7 +4502,6 @@ static int ds5_probe(struct i2c_client *c
 		dev_warn(&c->dev, "failed %d to get vcc regulator\n", ret);
 		return ret;
 	}
-
 	if (state->vcc) {
 		ret = regulator_enable(state->vcc);
 		if (ret < 0) {
@@ -4350,11 +4532,17 @@ static int ds5_probe(struct i2c_client *c
 	ports = of_get_child_by_name(c->dev.of_node, "ports");
 	if (!ports) goto e_regulator;
 	for_each_child_of_node(ports, port) {
-		ret = of_property_read_u32(port, "port-index", &pad);
-		if (!ret) {
+		endpoint = of_get_child_by_name(port, "endpoint");
+		if (!endpoint) {
+			dev_warn(&c->dev, "%s: missing endpoint entry for %s\n", __func__, port->name);
+			continue;
+		}
+		ret = of_property_read_u32(endpoint, "port-index", &pad);
+		if (ret) {
 			dev_warn(&c->dev, "%s: missing port-index entry for %s\n", __func__, port->name);
 			continue;
 		}
+		dev_info(&c->dev, "%s: port-index entry for %s: %d\n", __func__, port->name, pad);
 		sensor = devm_kzalloc(&c->dev, sizeof(*sensor), GFP_KERNEL);
 		sensor->port_index = pad;
 		sensor->control_base = DS5_DEPTH_CONTROL_BASE;
@@ -4364,9 +4552,8 @@ static int ds5_probe(struct i2c_client *c
 			sensor->status_reg = DS5_RGB_CONTROL_STATUS;
 		}
 		of_property_read_u32(port, "vc-id", &sensor->vc_id);
-		list_add_tail(&sensor->list, &state->sensors);
 		
-		mode = of_get_child_by_name(state->client->dev.of_node, "mode");
+		mode = of_get_child_by_name(endpoint, "mode");
 		if (mode) {
 			ret = of_property_read_string(mode, "embedded_metadata", &str);
 			sensor->metadata_enabled = true;
@@ -4375,7 +4562,7 @@ static int ds5_probe(struct i2c_client *c
 			of_node_put(mode);
 		} else {
 			dev_err(&state->client->dev, "No mode entry provided in device tree\n");
-			goto e_regulator;
+			continue;
 		}
 
 		dev_dbg(&c->dev, "%s: sensor %s metadata_enabled = %d\n",
@@ -4388,6 +4575,7 @@ static int ds5_probe(struct i2c_client *c
 			if (ret < 0)
 				goto e_regulator;
 		}
+		ds5_ctrl_init(sensor, state);
 	}
 #else
 	state->is_depth = 1;
@@ -4419,7 +4607,7 @@ static int ds5_probe(struct i2c_client *c
 	ret = ds5_wait_device_type(state, &rec_state);
 	if (ret < 0) {
 		dev_err(&c->dev,
-			"%s(): device type not ready after reset: %d (last val 0x%x)\n",
+			"%s: device type not ready after reset: %d (last val 0x%x)\n",
 			__func__, ret, rec_state);
 		goto e_chardev;
 	}
@@ -4439,8 +4627,7 @@ static int ds5_probe(struct i2c_client *c
 	ds5_read_with_check(state, DS5_FW_VERSION, &state->fw_version);
 	ds5_read_with_check(state, DS5_FW_BUILD, &state->fw_build);
 
-	dev_info(&c->dev, "D4XX Sensor: %s, firmware build: %d.%d.%d.%d\n",
-			ds5_get_sensor_name(sensor),
+	dev_info(&c->dev, "D4XX camera firmware build: %d.%d.%d.%d\n",
 			(state->fw_version >> 8) & 0xff, state->fw_version & 0xff,
 			(state->fw_build >> 8) & 0xff, state->fw_build & 0xff);
 
@@ -4464,14 +4651,6 @@ e_chardev:
 e_regulator:
 	if (state->vcc)
 		regulator_disable(state->vcc);
-#ifdef CONFIG_VIDEO_D4XX_SERDES
-#ifndef CONFIG_OF
-	if (state->ser_i2c)
-		i2c_unregister_device(state->ser_i2c);
-	if (state->dser_i2c && !state->aggregated)
-		i2c_unregister_device(state->dser_i2c);
-#endif
-#endif
 	return ret;
 }
 
@@ -4483,19 +4662,10 @@ static void ds5_remove(struct i2c_client *c)
 {
 	struct ds5 *state = i2c_get_clientdata(c);
 	struct ds5_sensor *sensor;
-#ifndef CONFIG_OF
-	if (state->ser_i2c)
-		i2c_unregister_device(state->ser_i2c);
-	if (state->dser_i2c && !state->aggregated)
-		i2c_unregister_device(state->dser_i2c);
-#endif
 #ifndef CONFIG_TEGRA_CAMERA_PLATFORM
 	state->is_depth = 1;
 #endif
-	list_for_each_entry(sensor, &state->sensors, list)
-		if (sensor->port_index == DS5_PAD_DEPTH
-				&& state->dfu_dev.ds5_class)
-			ds5_chrdev_remove(state);
+	ds5_chrdev_remove(state);
 	if (state->vcc)
 		regulator_disable(state->vcc);
 

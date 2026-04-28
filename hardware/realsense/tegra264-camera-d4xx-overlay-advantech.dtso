@@ -314,18 +314,18 @@
 									port-index = <0>;
 									bus-width = <2>;
 									remote-endpoint = <&serializer_sink_depth>;
-								};
-								mode {
-									pixel_t = "grey_y16";
-									num_lanes = "2";
-									csi_pixel_bit_depth = "16";
-									active_w = "640";
-									active_h = "480";
-									tegra_sinterface = "serial_b";
-									mclk_khz = "24000";
-									pix_clk_hz = "74250000";
-									line_length = "1280"; /* 2200 */
-									embedded_metadata = "true";
+									mode {
+										pixel_t = "grey_y16";
+										num_lanes = "2";
+										csi_pixel_bit_depth = "16";
+										active_w = "640";
+										active_h = "480";
+										tegra_sinterface = "serial_b";
+										mclk_khz = "24000";
+										pix_clk_hz = "74250000";
+										line_length = "1280"; /* 2200 */
+										embedded_metadata = "true";
+									};
 								};
 							};
 							port@1 {
@@ -334,18 +334,18 @@
 									port-index = <1>;
 									bus-width = <2>;
 									remote-endpoint = <&serializer_sink_rgb>;
-								};
-								mode {
-									pixel_t = "grey_y16";
-									num_lanes = "2";
-									csi_pixel_bit_depth = "16";
-									active_w = "1920";
-									active_h = "1080";
-									tegra_sinterface = "serial_e";
-									mclk_khz = "24000";
-									pix_clk_hz = "74250000";
-									line_length = "1280"; /* 2200 */
-									embedded_metadata = "true";
+									mode {
+										pixel_t = "grey_y16";
+										num_lanes = "2";
+										csi_pixel_bit_depth = "16";
+										active_w = "1920";
+										active_h = "1080";
+										tegra_sinterface = "serial_e";
+										mclk_khz = "24000";
+										pix_clk_hz = "74250000";
+										line_length = "1280"; /* 2200 */
+										embedded_metadata = "true";
+									};
 								};
 							};
 							port@2 {
@@ -354,18 +354,18 @@
 									port-index = <2>;
 									bus-width = <2>;
 									remote-endpoint = <&serializer_sink_ir>;
-								};
-								mode {
-									pixel_t = "grey_y16";
-									num_lanes = "2";
-									csi_pixel_bit_depth = "16";
-									active_w = "1280";
-									active_h = "720";
-									tegra_sinterface = "serial_a";
-									mclk_khz = "24000";
-									pix_clk_hz = "74250000";
-									line_length = "1280"; /* 2200 */
-									embedded_metadata = "true";
+									mode {
+										pixel_t = "grey_y16";
+										num_lanes = "2";
+										csi_pixel_bit_depth = "16";
+										active_w = "1280";
+										active_h = "720";
+										tegra_sinterface = "serial_a";
+										mclk_khz = "24000";
+										pix_clk_hz = "74250000";
+										line_length = "1280"; /* 2200 */
+										embedded_metadata = "true";
+									};
 								};
 							};
 							port@3 {
@@ -375,17 +375,17 @@
 									bus-width = <2>;
 									remote-endpoint = <&serializer_sink_imu>;
 									/* mode0: Y8, mode1: depth D16 */
-								};
-								mode {
-									pixel_t = "grey_y16";
-									num_lanes = "2";
-									csi_pixel_bit_depth = "16";
-									active_w = "1280";
-									active_h = "720";
-									tegra_sinterface = "serial_b";
-									mclk_khz = "24000";
-									pix_clk_hz = "74250000";
-									line_length = "1280"; /* 2200 */
+									mode {
+										pixel_t = "grey_y16";
+										num_lanes = "2";
+										csi_pixel_bit_depth = "16";
+										active_w = "1280";
+										active_h = "720";
+										tegra_sinterface = "serial_b";
+										mclk_khz = "24000";
+										pix_clk_hz = "74250000";
+										line_length = "1280"; /* 2200 */
+									};
 								};
 							};
 						};
