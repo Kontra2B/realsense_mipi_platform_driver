@@ -4109,9 +4109,7 @@ static int ds5_sensor_init(int id, struct ds5 *state)
 		sensor->control_base = DS5_RGB_CONTROL_BASE;
 		sensor->status_reg = DS5_RGB_CONTROL_STATUS;
 	}
-	if (id == DS5_PAD_IMU) {
-		sensor->metadata = false;
-	}
+	if (id == DS5_PAD_IMU) sensor->metadata = false;
 	dev_info(&state->client->dev, "%s: sensor %s, %s\n",
 			__func__, ds5_sensor_name[id],
 			sensor->metadata? "metadata enabled": "no metadata");
@@ -4133,12 +4131,11 @@ static int ds5_sensor_init(int id, struct ds5 *state)
 #endif
 	sd->flags |= V4L2_SUBDEV_FL_HAS_DEVNODE;
 	for (int id = DS5_PAD_DEPTH; id < DS5_PAD_COUNT; id++)
-		pad++->flags = MEDIA_PAD_FL_SINK;
+		pad[id].flags = MEDIA_PAD_FL_SINK;
 	pad[id].flags = MEDIA_PAD_FL_SOURCE;
 	entity->obj_type = MEDIA_ENTITY_TYPE_V4L2_SUBDEV;
 	entity->function = MEDIA_ENT_F_CAM_SENSOR;
 
-	media_entity_pads_init(entity, DS5_PAD_COUNT, sensor->pad);
 	v4l2_i2c_subdev_init(sd, state->client, &ds5_camera_ops);
 	ret = v4l2_device_register_subdev(sd->v4l2_dev, sd);
 	if (!ret) {
@@ -4151,7 +4148,11 @@ static int ds5_sensor_init(int id, struct ds5 *state)
 		ret = ds5_chrdev_init(client, state);
 		if (ret) return ret;
 	}
-	return media_entity_pads_init(entity, 1, pad);
+	media_entity_pads_init(entity, DS5_PAD_COUNT, sensor->pad);
+	if (ret) 
+		dev_info(sd->dev, "%s: sensor %s registered subdevice: %s\n",
+				__func__, ds5_sensor_name[id], sd->name);
+	return ret;
 }
 
 static int ds5_hw_init(struct i2c_client *c, struct ds5 *state)
@@ -4292,7 +4293,7 @@ int ds5_chrdev_init(struct i2c_client *client, struct ds5 *state)
 		return ret;
 
 	if (!atomic_read(&primary_chardev)) {
-		dev_info(&client->dev, "%s: <major, minor>: <%d, %d>\n",
+		dev_info(&client->dev, "%s: <major/minor>: <%d/%d>\n",
 				__func__, MAJOR(*dev_num), MINOR(*dev_num));
 		/* Create a class : appears at /sys/class */
 #if defined(NV_CLASS_CREATE_HAS_NO_OWNER_ARG) || LINUX_VERSION_CODE < KERNEL_VERSION(6, 8, 0)
