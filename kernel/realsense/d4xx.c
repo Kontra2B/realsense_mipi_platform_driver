@@ -369,7 +369,7 @@ struct ds5_format {
 struct ds5_sensor {
 	int id;
 	struct v4l2_subdev sd;
-	struct media_pad pad;
+	struct media_pad pad[DS5_PAD_COUNT];
 	struct ds5_ctrls ctrls;
 	struct v4l2_mbus_framefmt format;
 	struct v4l2_ctrl_handler handler;
@@ -2217,8 +2217,8 @@ static int ds5_set_calibration_data(struct ds5 *state,
  * In non-DFU mode this register is not defined.
  * - 0x04030201: Device in DFU mode (DFU magic bytes, little-endian)
  */
-#define DS5_DFU_MAGIC_REG	0x5020
-#define DS5_DFU_MAGIC_LSW		0x0201  /* Lower 16 bits of 0x04030201 */
+#define DS5_DFU_MAGIC_REG				0x5020
+#define DS5_DFU_MAGIC_LSW				0x0201  /* Lower 16 bits of 0x04030201 */
 
 static int ds5_wait_device_type(struct ds5 *state, u16 *dev_type)
 {
@@ -3420,7 +3420,6 @@ static int ds5_ctrl_init(struct ds5_sensor *sensor)
 	struct v4l2_subdev *sd = &sensor->sd;
 	struct ds5 *state = v4l2_get_subdevdata(sd);
 	struct ds5_ctrls *ctrls = &sensor->ctrls;
-	struct media_entity *entity = &sensor->sd.entity;
 	struct v4l2_ctrl_handler *hdl;
 	int ret = -1;
 
@@ -3430,11 +3429,6 @@ static int ds5_ctrl_init(struct ds5_sensor *sensor)
 		v4l2_err(sd, "cannot init ctrl handler (%d)\n", ret);
 		return ret;
 	}
-
-	// See tegracam_v4l2.c tegracam_v4l2subdev_register()
-	// Set owner to NULL so we can unload the driver module
-	sensor->pad.flags = MEDIA_PAD_FL_SOURCE;
-	ret = media_entity_pads_init(entity, 1, &sensor->pad);
 
 	if (sensor->id == DS5_PAD_DEPTH || sensor->id == DS5_PAD_IR) {
 		ctrls->laser_power = v4l2_ctrl_new_custom(hdl,
@@ -4090,14 +4084,16 @@ static void ds5_adjust_sync_mode_control(struct i2c_client *client, struct ds5 *
 		break;
 	}
 }
+
 int ds5_chrdev_init(struct i2c_client *client, struct ds5 *state);
+
 static int ds5_sensor_init(int id, struct ds5 *state)
 {
 	struct i2c_client *client = state->client;
 	struct ds5_sensor *sensor = &state->sensor[id];
 	struct v4l2_subdev *sd = &sensor->sd;
 	struct media_entity *entity = &sensor->sd.entity;
-	struct media_pad *pad = &sensor->pad;
+	struct media_pad *pad = sensor->pad;
 	dev_t *dev_num = &state->client->dev.devt;
 	int ret;
 #ifndef CONFIG_OF
@@ -4116,19 +4112,13 @@ static int ds5_sensor_init(int id, struct ds5 *state)
 	if (id == DS5_PAD_IMU) {
 		sensor->metadata = false;
 	}
-	dev_dbg(&state->client->dev, "%s: sensor %s, %s\n",
-			__func__,
-			ds5_sensor_name[id],
+	dev_info(&state->client->dev, "%s: sensor %s, %s\n",
+			__func__, ds5_sensor_name[id],
 			sensor->metadata? "metadata enabled": "no metadata");
 
 	sd->owner = THIS_MODULE;
 	sd->internal_ops = &ds5_internal_ops;
 	sd->grp_id = *dev_num;
-	v4l2_set_subdevdata(sd, state);
-	v4l2_i2c_subdev_init(sd, state->client, &ds5_camera_ops);
-	ret = v4l2_device_register_subdev(sd->v4l2_dev, sd);
-	if (!ret) return ret;
-
 	ds5_ctrl_init(sensor);
 #ifndef CONFIG_OF
 	/*
@@ -4141,12 +4131,22 @@ static int ds5_sensor_init(int id, struct ds5 *state)
 	snprintf(sd->name, sizeof(sd->name), "D4XX %s %d-%04x",
 			ds5_sensor_name[sensor->id], i2c_adapter_id(client->adapter), client->addr);
 #endif
-
 	sd->flags |= V4L2_SUBDEV_FL_HAS_DEVNODE;
-
-	pad->flags = MEDIA_PAD_FL_SOURCE;
+	for (int id = DS5_PAD_DEPTH; id < DS5_PAD_COUNT; id++)
+		pad++->flags = MEDIA_PAD_FL_SINK;
+	pad[id].flags = MEDIA_PAD_FL_SOURCE;
 	entity->obj_type = MEDIA_ENTITY_TYPE_V4L2_SUBDEV;
 	entity->function = MEDIA_ENT_F_CAM_SENSOR;
+
+	media_entity_pads_init(entity, DS5_PAD_COUNT, sensor->pad);
+	v4l2_i2c_subdev_init(sd, state->client, &ds5_camera_ops);
+	ret = v4l2_device_register_subdev(sd->v4l2_dev, sd);
+	if (!ret) {
+		dev_err(sd->dev, "%s: failed to register sensor subdevice: %s\n",
+				__func__, ds5_sensor_name[id]);
+		return ret;
+	}
+
 	if (id == DS5_PAD_DEPTH) {
 		ret = ds5_chrdev_init(client, state);
 		if (ret) return ret;
@@ -4269,8 +4269,8 @@ static const struct file_operations ds5_device_file_ops = {
 	.release = &ds5_dfu_device_release
 };
 
-struct class *g_ds5_class;
 atomic_t primary_chardev = ATOMIC_INIT(0);
+struct class *g_ds5_class;
 
 int ds5_chrdev_init(struct i2c_client *client, struct ds5 *state)
 {
@@ -4285,14 +4285,14 @@ int ds5_chrdev_init(struct i2c_client *client, struct ds5 *state)
 	dev_t *dev_num = &client->dev.devt;
 	int ret;
 
-	dev_dbg(&client->dev, "%s()\n", __func__);
+	dev_dbg(&client->dev, "%s\n", __func__);
 	/* Request the kernel for N_MINOR devices */
 	ret = alloc_chrdev_region(dev_num, 0, 1, DS5_DRIVER_NAME_DFU);
 	if (ret < 0)
 		return ret;
 
 	if (!atomic_read(&primary_chardev)) {
-		dev_dbg(&client->dev, "%s(): <Major, Minor>: <%d, %d>\n",
+		dev_info(&client->dev, "%s: <major, minor>: <%d, %d>\n",
 				__func__, MAJOR(*dev_num), MINOR(*dev_num));
 		/* Create a class : appears at /sys/class */
 #if defined(NV_CLASS_CREATE_HAS_NO_OWNER_ARG) || LINUX_VERSION_CODE < KERNEL_VERSION(6, 8, 0)
@@ -4300,9 +4300,9 @@ int ds5_chrdev_init(struct i2c_client *client, struct ds5 *state)
 #else
 		*ds5_class = class_create(DS5_DRIVER_NAME_CLASS);
 #endif
-		dev_warn(&state->client->dev, "%s: class create\n", __func__);
+		dev_info(&state->client->dev, "%s: class create\n", __func__);
 		if (IS_ERR(*ds5_class)) {
-			dev_err(&client->dev, "Could not create class device\n");
+			dev_err(&client->dev, "could not create class device\n");
 			unregister_chrdev_region(0, 1);
 			ret = PTR_ERR(*ds5_class);
 			return ret;
@@ -4327,7 +4327,7 @@ int ds5_chrdev_init(struct i2c_client *client, struct ds5 *state)
 	chr_dev = device_create(*ds5_class, NULL, *dev_num, NULL, dev_name);
 	if (IS_ERR(chr_dev)) {
 		ret = PTR_ERR(chr_dev);
-		dev_err(&client->dev, "Could not create device\n");
+		dev_err(&client->dev, "could not create device\n");
 		class_destroy(*ds5_class);
 		unregister_chrdev_region(0, 1);
 		return ret;
@@ -4524,33 +4524,11 @@ static int ds5_probe(struct i2c_client *c
 		goto e_regulator;
 	}
 
-#ifdef CONFIG_OF
-	for (int id = DS5_PAD_DEPTH; id < DS5_PAD_COUNT; id++) {
-		ret = ds5_sensor_init(id, state);
-		if (ret) goto e_regulator;
-	}
-#else
+#ifndef CONFIG_OF
 	state->is_depth = 1;
 	state->control_base = DS5_DEPTH_CONTROL_BASE;
 	state->control_status_reg = DS5_DEPTH_CONTROL_STATUS;
 #endif
-
-	if (atomic_cmpxchg(&state->ds5_probe_reset_once, 0, 1) == 0) {
-		dev_info(&c->dev, "%s: first probe instance, running HW reset recovery\n",
-			__func__);
-
-		ret = ds5_hw_reset_with_recovery(state);
-		if (ret < 0) {
-			dev_err(&c->dev, "%s(): probe HW reset recovery failed: %d\n",
-				__func__, ret);
-			goto e_chardev;
-		}
-
-		/* Wait after HW reset before touching MAX9295 serializer registers.
-		 * This delay helps ensure the device is ready.
-		 */
-		msleep(200);
-	}
 
 	/* Verify post-reset format-discovery readiness.
 	 * FW_VERSION becomes readable earlier than DS5_DEVICE_TYPE, while later
@@ -4572,14 +4550,14 @@ static int ds5_probe(struct i2c_client *c
 		dev_info(&c->dev, "%s: D4XX recovery state\n", __func__);
 		state->dfu_dev.dfu_state_flag = DS5_DFU_RECOVERY;
 		/* Override I2C drvdata with state for use in remove function */
-		i2c_set_clientdata(c, state);
 		return 0;
 	}
 
 	ds5_read_with_check(state, DS5_FW_VERSION, &state->fw_version);
 	ds5_read_with_check(state, DS5_FW_BUILD, &state->fw_build);
 
-	dev_info(&c->dev, "D4XX camera firmware build: %d.%d.%d.%d\n",
+	dev_info(&c->dev, "%s: camera firmware build: %d.%d.%d.%d\n",
+			__func__,
 			(state->fw_version >> 8) & 0xff, state->fw_version & 0xff,
 			(state->fw_build >> 8) & 0xff, state->fw_build & 0xff);
 
@@ -4590,6 +4568,7 @@ static int ds5_probe(struct i2c_client *c
 	dev_info(&c->dev, "%s: driver version: %s\n", __func__,
 		THIS_MODULE->version ? THIS_MODULE->version : "N/A");
 
+	i2c_set_clientdata(c, state);
 #ifdef CONFIG_SYSFS
 	/* Custom sysfs attributes */
 	/* create the sysfs file group */
