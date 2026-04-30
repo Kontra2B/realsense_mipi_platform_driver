@@ -54,12 +54,6 @@
 #define DS5_FW_VERSION				0x030C
 #define DS5_FW_BUILD				0x030E
 #define DS5_DEVICE_TYPE				0x0310
-#define DS5_DEVICE_TYPE_D40X		8
-#define DS5_DEVICE_TYPE_D41X		7
-#define DS5_DEVICE_TYPE_D45X		6
-#define DS5_DEVICE_TYPE_D43X		5
-#define DS5_DEVICE_TYPE_D46X		4
-#define DS5_DEVICE_TYPE_UNKNOWN		0
 
 #define DS5_MIPI_LANE_NUMS			0x0400
 #define DS5_MIPI_LANE_DATARATE		0x0402
@@ -71,13 +65,13 @@
 #define DS5_IMU_STREAM_STATUS		0x100C
 #define DS5_IR_STREAM_STATUS		0x1014
 
-#define DS5_STREAM_DEPTH		0x0
-#define DS5_STREAM_RGB			0x1
-#define DS5_STREAM_IMU			0x2
-#define DS5_STREAM_IR			0x4
-#define DS5_STREAM_STOP			0x100
-#define DS5_STREAM_START		0x200
-#define DS5_STREAM_IDLE			0x1
+#define DS5_STREAM_DEPTH			0x0
+#define DS5_STREAM_RGB				0x1
+#define DS5_STREAM_IMU				0x2
+#define DS5_STREAM_IR				0x4
+#define DS5_STREAM_STOP				0x100
+#define DS5_STREAM_START			0x200
+#define DS5_STREAM_IDLE				0x1
 #define DS5_STREAM_STREAMING		0x2
 
 #define DS5_DEPTH_STREAM_DT		 0x4000
@@ -141,6 +135,30 @@
 #define MAX_RGB_EXP					10000
 #define DEF_DEPTH_EXP				33000
 #define DEF_RGB_EXP					1660
+
+enum ds5_device_type {
+	DS5_DEVICE_TYPE_UNKNOWN,
+	DS5_DEVICE_1,
+	DS5_DEVICE_2,
+	DS5_DEVICE_3,
+	DS5_DEVICE_TYPE_D46X,
+	DS5_DEVICE_TYPE_D43X,
+	DS5_DEVICE_TYPE_D45X,
+	DS5_DEVICE_TYPE_D41X,
+	DS5_DEVICE_TYPE_D40X
+};
+
+char *ds5_device_name[] = {
+	[DS5_DEVICE_TYPE_UNKNOWN] = "Unknown",
+	[DS5_DEVICE_1] = NULL,
+	[DS5_DEVICE_2] = NULL,
+	[DS5_DEVICE_3] = NULL,
+	[DS5_DEVICE_TYPE_D40X] = "D40X",
+	[DS5_DEVICE_TYPE_D41X] = "D41X",
+	[DS5_DEVICE_TYPE_D45X] = "D45X",
+	[DS5_DEVICE_TYPE_D43X] = "D43X",
+	[DS5_DEVICE_TYPE_D46X] = "D46X",
+};
 
 enum ds5_sensor_id {
 	DS5_PAD_DEPTH,
@@ -369,7 +387,7 @@ struct ds5_format {
 struct ds5_sensor {
 	int id;
 	struct v4l2_subdev sd;
-	struct media_pad pad[DS5_PAD_COUNT];
+	struct media_pad pad;
 	struct ds5_ctrls ctrls;
 	struct v4l2_mbus_framefmt format;
 	struct v4l2_ctrl_handler handler;
@@ -4114,20 +4132,27 @@ static int ds5_sensor_init(int id, struct ds5 *state)
 			__func__, ds5_sensor_name[id],
 			sensor->metadata? "metadata enabled": "no metadata");
 
+	ds5_ctrl_init(sensor);
+	sd->flags |= V4L2_SUBDEV_FL_HAS_DEVNODE;
+	pad->flags = MEDIA_PAD_FL_SOURCE;
+
+	media_entity_pads_init(entity, DS5_PAD_COUNT, sensor->pad);
+	v4l2_i2c_subdev_init(sd, state->client, &ds5_camera_ops);
 	sd->owner = THIS_MODULE;
 	sd->internal_ops = &ds5_internal_ops;
 	sd->grp_id = *dev_num;
-	ds5_ctrl_init(sensor);
+	entity->obj_type = MEDIA_ENTITY_TYPE_V4L2_SUBDEV;
+	entity->function = MEDIA_ENT_F_CAM_SENSOR;
 #ifndef CONFIG_OF
 	/*
 	 * TODO: suffix for 2 D457 connected to 1 Deser
 	 */
 	if (state->aggregated & 1)
 		suffix += 4;
-	snprintf(sd->name, sizeof(sd->name), "D4XX %s %c", name, suffix);
+	snprintf(sd->name, sizeof(sd->name), "d4xx-%s-%c", name, suffix);
 #else
-	snprintf(sd->name, sizeof(sd->name), "D4XX %s %d-%04x",
-			ds5_sensor_name[sensor->id], i2c_adapter_id(client->adapter), client->addr);
+	snprintf(sd->name, sizeof(sd->name), "d4xx-%s-%d-%04x",
+			ds5_sensor_name[id], i2c_adapter_id(client->adapter), client->addr);
 #endif
 	sd->flags |= V4L2_SUBDEV_FL_HAS_DEVNODE;
 	for (int id = DS5_PAD_DEPTH; id < DS5_PAD_COUNT; id++)
@@ -4138,7 +4163,7 @@ static int ds5_sensor_init(int id, struct ds5 *state)
 
 	v4l2_i2c_subdev_init(sd, state->client, &ds5_camera_ops);
 	ret = v4l2_device_register_subdev(sd->v4l2_dev, sd);
-	if (!ret) {
+	if (ret) {
 		dev_err(sd->dev, "%s: failed to register sensor subdevice: %s\n",
 				__func__, ds5_sensor_name[id]);
 		return ret;
@@ -4148,11 +4173,11 @@ static int ds5_sensor_init(int id, struct ds5 *state)
 		ret = ds5_chrdev_init(client, state);
 		if (ret) return ret;
 	}
-	media_entity_pads_init(entity, DS5_PAD_COUNT, sensor->pad);
-	if (ret) 
-		dev_info(sd->dev, "%s: sensor %s registered subdevice: %s\n",
-				__func__, ds5_sensor_name[id], sd->name);
-	return ret;
+
+	dev_info(sd->dev, "%s/%d: register sensor subdevice: %s\n",
+				__func__, id, ds5_sensor_name[id]);
+
+	return media_entity_pads_init(entity, 1, pad);
 }
 
 static int ds5_hw_init(struct i2c_client *c, struct ds5 *state)
