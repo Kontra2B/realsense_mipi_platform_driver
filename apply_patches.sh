@@ -124,15 +124,11 @@ echo "Patches applied successfully"
 
 if [[ "$ACTION" = "apply" ]]; then
 	# for jetpack prior to 5.0, the d4xx driver source code is created from patches
-	version_lt "$JETPACK_VERSION" "5.0" || ln -sfr "kernel/realsense/d4xx.c" "${BUILD_SRCS}/${D4XX_SRC_DST}/drivers/media/i2c/"
+	version_lt "$JETPACK_VERSION" "5.0" || ln -sfr kernel/realsense/d4xx.* "${BUILD_SRCS}/${D4XX_SRC_DST}/drivers/media/i2c/"
 	if version_lt "$JETPACK_VERSION" "6.0"; then
 		# device tree
 		ln -sfr "hardware/realsense/${JP5_D4XX_DTSI}" "${BUILD_SRCS}/hardware/nvidia/platform/t19x/galen/kernel-dts/common/tegra194-camera-d4xx.dtsi"
-		# max96712 header
-		ln -sfr "kernel/nvidia/max96712.h" "${BUILD_SRCS}/kernel/nvidia/include/media/"
 	else
-		# max96712 header
-		ln -sfr "nvidia-oot/max96712.h" "${BUILD_SRCS}/nvidia-oot/include/media/"
 		if version_lt "$JETPACK_VERSION" "7.0"; then
 			# jp6 overlay
 			ln -sfr hardware/realsense/tegra234-camera-d4xx-overlay*.dts "${BUILD_SRCS}/hardware/nvidia/t23x/nv-public/overlay/"

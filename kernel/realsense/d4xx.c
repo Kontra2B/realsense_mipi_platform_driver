@@ -23,6 +23,7 @@
 #include <linux/kernel.h>
 #include <linux/media.h>
 #include <linux/module.h>
+#include <linux/property.h>
 #include <linux/of_gpio.h>
 #include <linux/regmap.h>
 #include <linux/regulator/consumer.h>
@@ -41,11 +42,11 @@
 #include <media/gmsl-link.h>
 
 //#define DS5_DRIVER_NAME "DS5 RealSense camera driver"
-#define DS5_DRIVER_NAME "d4xx"
-#define DS5_DRIVER_NAME_AWG "d4xx-awg"
-#define DS5_DRIVER_NAME_ASR "d4xx-asr"
-#define DS5_DRIVER_NAME_CLASS "d4xx-class"
-#define DS5_DRIVER_NAME_DFU "d4xx-dfu"
+#define DS5_DRIVER_NAME				"d4xx"
+#define DS5_DRIVER_NAME_AWG			"d4xx-awg"
+#define DS5_DRIVER_NAME_ASR			"d4xx-asr"
+#define DS5_DRIVER_NAME_CLASS		"d4xx-class"
+#define DS5_DRIVER_NAME_DFU			"d4xx-dfu"
 
 #define DS5_MIPI_SUPPORT_LINES		0x0300
 #define DS5_MIPI_SUPPORT_PHY		0x0304
@@ -74,35 +75,35 @@
 #define DS5_STREAM_IDLE				0x1
 #define DS5_STREAM_STREAMING		0x2
 
-#define DS5_DEPTH_STREAM_DT		 0x4000
-#define DS5_DEPTH_STREAM_MD		 0x4002
-#define DS5_DEPTH_RES_WIDTH		 0x4004
-#define DS5_DEPTH_RES_HEIGHT	 0x4008
-#define DS5_DEPTH_FPS			 0x400C
-#define DS5_DEPTH_OVERRIDE		 0x401C
-#define DS5_DEPTH_CONTROL_STATUS 0x401E
+#define DS5_DEPTH_STREAM_DT			0x4000
+#define DS5_DEPTH_STREAM_MD			0x4002
+#define DS5_DEPTH_RES_WIDTH			0x4004
+#define DS5_DEPTH_RES_HEIGHT		0x4008
+#define DS5_DEPTH_FPS				0x400C
+#define DS5_DEPTH_OVERRIDE	 		0x401C
+#define DS5_DEPTH_CONTROL_STATUS	0x401E
 
-#define DS5_RGB_STREAM_DT		0x4020
-#define DS5_RGB_STREAM_MD		0x4022
-#define DS5_RGB_RES_WIDTH		0x4024
-#define DS5_RGB_RES_HEIGHT		0x4028
-#define DS5_RGB_FPS				0x402C
-#define DS5_RGB_CONTROL_STATUS 	0x402E
+#define DS5_RGB_STREAM_DT			0x4020
+#define DS5_RGB_STREAM_MD			0x4022
+#define DS5_RGB_RES_WIDTH			0x4024
+#define DS5_RGB_RES_HEIGHT			0x4028
+#define DS5_RGB_FPS					0x402C
+#define DS5_RGB_CONTROL_STATUS 		0x402E
 
-#define DS5_IMU_STREAM_DT		0x4040
-#define DS5_IMU_STREAM_MD		0x4042
-#define DS5_IMU_RES_WIDTH		0x4044
-#define DS5_IMU_RES_HEIGHT		0x4048
-#define DS5_IMU_FPS				0x404C
-#define DS5_IMU_CONTROL_STATUS 	0x404E
+#define DS5_IMU_STREAM_DT			0x4040
+#define DS5_IMU_STREAM_MD			0x4042
+#define DS5_IMU_RES_WIDTH			0x4044
+#define DS5_IMU_RES_HEIGHT			0x4048
+#define DS5_IMU_FPS					0x404C
+#define DS5_IMU_CONTROL_STATUS 		0x404E
 
-#define DS5_IR_STREAM_DT		0x4080
-#define DS5_IR_STREAM_MD		0x4082
-#define DS5_IR_RES_WIDTH		0x4084
-#define DS5_IR_RES_HEIGHT		0x4088
-#define DS5_IR_FPS				0x408C
-#define DS5_IR_OVERRIDE			0x409C
-#define DS5_IR_CONTROL_STATUS 	0x409E
+#define DS5_IR_STREAM_DT			0x4080
+#define DS5_IR_STREAM_MD			0x4082
+#define DS5_IR_RES_WIDTH			0x4084
+#define DS5_IR_RES_HEIGHT			0x4088
+#define DS5_IR_FPS					0x408C
+#define DS5_IR_OVERRIDE				0x409C
+#define DS5_IR_CONTROL_STATUS 		0x409E
 
 #define DS5_DEPTH_CONTROL_BASE		0x4100
 #define DS5_RGB_CONTROL_BASE		0x4200
@@ -140,19 +141,20 @@ enum ds5_device_type {
 	DS5_DEVICE_TYPE_UNKNOWN,
 	DS5_DEVICE_1,
 	DS5_DEVICE_2,
-	DS5_DEVICE_3,
+	DS5_DEVICE_TYPE_FIRST,
 	DS5_DEVICE_TYPE_D46X,
 	DS5_DEVICE_TYPE_D43X,
 	DS5_DEVICE_TYPE_D45X,
 	DS5_DEVICE_TYPE_D41X,
-	DS5_DEVICE_TYPE_D40X
+	DS5_DEVICE_TYPE_D40X,
+	DS5_DEVICE_TYPE_LAST
 };
 
 char *ds5_device_name[] = {
 	[DS5_DEVICE_TYPE_UNKNOWN] = "Unknown",
 	[DS5_DEVICE_1] = NULL,
 	[DS5_DEVICE_2] = NULL,
-	[DS5_DEVICE_3] = NULL,
+	[DS5_DEVICE_TYPE_FIRST] = NULL,
 	[DS5_DEVICE_TYPE_D40X] = "D40X",
 	[DS5_DEVICE_TYPE_D41X] = "D41X",
 	[DS5_DEVICE_TYPE_D45X] = "D45X",
@@ -176,25 +178,25 @@ char* ds5_sensor_name[] = {
 };
 
 #define DS5_N_CONTROLS			8
-#define DS5_MAX_STREAMS	4
+#define DS5_MAX_STREAMS			4
 
-#define DFU_WAIT_RET_LEN 6
+#define DFU_WAIT_RET_LEN		6
 
-#define DS5_START_POLL_TIME	10
-#define DS5_START_MAX_TIME	2000
+#define DS5_START_POLL_TIME		10
+#define DS5_START_MAX_TIME		2000
 #define DS5_START_MAX_COUNT	(DS5_START_MAX_TIME / DS5_START_POLL_TIME)
 #define MAX_DS5_CONFIG_RETRIES	5
 
 /* I2C retry configuration */
-#define DS5_I2C_RETRY_COUNT	5
+#define DS5_I2C_RETRY_COUNT		5
 #define DS5_I2C_RETRY_DELAY_US	5000
 
 /* DFU definition section */
 #define DFU_MAGIC_NUMBER "/0x01/0x02/0x03/0x04"
-#define DFU_BLOCK_SIZE 1024
+#define DFU_BLOCK_SIZE			1024
 #ifdef CONFIG_TEGRA_CAMERA_PLATFORM
-#define DFU_I2C_STANDARD_MODE		100000
-#define DFU_I2C_FAST_MODE			400000
+#define DFU_I2C_STANDARD_MODE	100000
+#define DFU_I2C_FAST_MODE		400000
 #define DFU_I2C_BUS_CLK_RATE		DFU_I2C_FAST_MODE
 #endif
 #define ds5_read_with_check(state, addr, val) {\
@@ -447,49 +449,32 @@ struct ds5 {
 	struct regulator *vcc;
 	const struct ds5_variant *variant;
 	int aggregated;
-	int reset_ref_ds5;
 	u16 fw_version;
 	u16 fw_build;
 	u16 lanes;
-	u16 cached_device_type;
+	u16 device_type;
 	unsigned long last_reset_jiffies;
+	bool handle_reset;
 	atomic_t ds5_probe_reset_once;
 };
 
-static atomic_t ds5_reset_gen = ATOMIC_INIT(0);
-static inline atomic_t *ds5_get_reset_gen(struct ds5 *state)
-{
-	return &ds5_reset_gen;
-}
-
 static inline u16 ds5_dev_type(struct ds5 *state, u16 dev_type)
 {
-	if (dev_type == 0 && state->cached_device_type != 0) {
+	if (dev_type == 0 && state->device_type != 0) {
 		dev_info(&state->client->dev,
-			"%s: device type register returned 0, using cached type 0x%x\n",
-			__func__, state->cached_device_type);
-		dev_type = state->cached_device_type;
+			"%s: device type register returned 0, using saved type 0x%x\n",
+			__func__, state->device_type);
+		dev_type = state->device_type;
 	}
 	return dev_type;
 }
 
 static bool ds5_is_valid_device_type(u16 dev_type)
 {
-	switch (dev_type) {
-	case DS5_DEVICE_TYPE_D40X:
-	case DS5_DEVICE_TYPE_D41X:
-	case DS5_DEVICE_TYPE_D43X:
-	case DS5_DEVICE_TYPE_D45X:
-	case DS5_DEVICE_TYPE_D46X:
-		return true;
-	default:
-		return false;
-	}
+	return (dev_type > DS5_DEVICE_TYPE_FIRST
+			&& dev_type < DS5_DEVICE_TYPE_LAST);
 }
 
-#define ds5_from_depth_sd(sd) container_of(sd, struct ds5, depth.sd)
-#define ds5_from_ir_sd(sd) container_of(sd, struct ds5, ir.sd)
-#define ds5_from_rgb_sd(sd) container_of(sd, struct ds5, rgb.sd)
 #if LINUX_VERSION_CODE > KERNEL_VERSION(5, 15, 136)
 #if LINUX_VERSION_CODE < KERNEL_VERSION(5, 15, 148)
 static inline void msleep_range(unsigned int delay_base)
@@ -509,7 +494,7 @@ static int ds5_write(struct ds5 *state, u16 reg, u16 val)
 	value[0] = val & 0x00FF;
 
 	dev_dbg(&state->client->dev,
-			"%s(): writing to register: 0x%04x, value1: 0x%x, value2:0x%x\n",
+			"%s: writing to register: 0x%04x, value1: 0x%x, value2:0x%x\n",
 			__func__, reg, value[1], value[0]);
 
 	for (retry = 0; retry < DS5_I2C_RETRY_COUNT; retry++) {
@@ -518,7 +503,7 @@ static int ds5_write(struct ds5 *state, u16 reg, u16 val)
 			break;
 		if (retry < DS5_I2C_RETRY_COUNT - 1) {
 			dev_warn(&state->client->dev,
-				"%s(): i2c write retry %d, 0x%04x = 0x%x, err %d\n",
+				"%s: i2c write retry %d, 0x%04x = 0x%x, err %d\n",
 				__func__, retry + 1, reg, val, ret);
 			usleep_range(DS5_I2C_RETRY_DELAY_US,
 				     DS5_I2C_RETRY_DELAY_US + 500);
@@ -526,10 +511,10 @@ static int ds5_write(struct ds5 *state, u16 reg, u16 val)
 	}
 	if (ret < 0)
 		dev_err(&state->client->dev,
-			"%s(): i2c write failed after %d retries, 0x%04x = 0x%x, err %d\n",
+			"%s: i2c write failed after %d retries, 0x%04x = 0x%x, err %d\n",
 			__func__, DS5_I2C_RETRY_COUNT, reg, val, ret);
 	else if (state->dfu_dev.dfu_state_flag == DS5_DFU_IDLE)
-		dev_dbg(&state->client->dev, "%s(): i2c write 0x%04x: 0x%x\n",
+		dev_dbg(&state->client->dev, "%s: i2c write 0x%04x: 0x%x\n",
 			__func__, reg, val);
 
 	return ret;
@@ -547,7 +532,7 @@ static int ds5_raw_write(struct ds5 *state, u16 reg,
 			break;
 		if (retry < DS5_I2C_RETRY_COUNT - 1) {
 			dev_warn(&state->client->dev,
-				"%s(): i2c raw write retry %d, 0x%04x size(%d), err %d\n",
+				"%s: i2c raw write retry %d, 0x%04x size(%d), err %d\n",
 				__func__, retry + 1, reg, (int)val_len, ret);
 			usleep_range(DS5_I2C_RETRY_DELAY_US,
 				     DS5_I2C_RETRY_DELAY_US + 500);
@@ -555,11 +540,11 @@ static int ds5_raw_write(struct ds5 *state, u16 reg,
 	}
 	if (ret < 0)
 		dev_err(&state->client->dev,
-			"%s(): i2c raw write failed after %d retries, 0x%04x size(%d), err %d\n",
+			"%s: i2c raw write failed after %d retries, 0x%04x size(%d), err %d\n",
 			__func__, DS5_I2C_RETRY_COUNT, reg, (int)val_len, ret);
 	else if (state->dfu_dev.dfu_state_flag == DS5_DFU_IDLE)
 		dev_dbg(&state->client->dev,
-			"%s(): i2c raw write 0x%04x: %d bytes\n",
+			"%s: i2c raw write 0x%04x: %d bytes\n",
 			__func__, reg, (int)val_len);
 
 	return ret;
@@ -576,7 +561,7 @@ static int ds5_read(struct ds5 *state, u16 reg, u16 *val)
 			break;
 		if (retry < DS5_I2C_RETRY_COUNT - 1) {
 			dev_warn(&state->client->dev,
-				"%s(): i2c read retry %d, 0x%04x, err %d\n",
+				"%s: i2c read retry %d, 0x%04x, err %d\n",
 				__func__, retry + 1, reg, ret);
 			usleep_range(DS5_I2C_RETRY_DELAY_US,
 				     DS5_I2C_RETRY_DELAY_US + 500);
@@ -584,10 +569,10 @@ static int ds5_read(struct ds5 *state, u16 reg, u16 *val)
 	}
 	if (ret < 0)
 		dev_err(&state->client->dev,
-			"%s(): i2c read failed after %d retries, 0x%04x, err %d\n",
+			"%s: i2c read failed after %d retries, 0x%04x, err %d\n",
 			__func__, DS5_I2C_RETRY_COUNT, reg, ret);
 	else if (state->dfu_dev.dfu_state_flag == DS5_DFU_IDLE)
-		dev_dbg(&state->client->dev, "%s(): i2c read 0x%04x: 0x%x\n",
+		dev_dbg(&state->client->dev, "%s: i2c read 0x%04x: 0x%x\n",
 			__func__, reg, *val);
 
 	return ret;
@@ -609,7 +594,7 @@ static int ds5_raw_read(struct ds5 *state, u16 reg, void *val, size_t val_len)
 			break;
 		if (retry < DS5_I2C_RETRY_COUNT - 1) {
 			dev_warn(&state->client->dev,
-				"%s(): i2c raw read retry %d, 0x%04x size(%d), err %d\n",
+				"%s: i2c raw read retry %d, 0x%04x size(%d), err %d\n",
 				__func__, retry + 1, reg, (int)val_len, ret);
 			usleep_range(DS5_I2C_RETRY_DELAY_US,
 				     DS5_I2C_RETRY_DELAY_US + 500);
@@ -617,7 +602,7 @@ static int ds5_raw_read(struct ds5 *state, u16 reg, void *val, size_t val_len)
 	}
 	if (ret < 0)
 		dev_err(&state->client->dev,
-			"%s(): i2c raw read failed after %d retries, 0x%04x size(%d), err %d\n",
+			"%s: i2c raw read failed after %d retries, 0x%04x size(%d), err %d\n",
 			__func__, DS5_I2C_RETRY_COUNT, reg, (int)val_len, ret);
 
 	return ret;
@@ -1433,7 +1418,7 @@ static int ds5_sensor_get_fmt(struct v4l2_subdev *sd,
 	else
 		fmt->format = sensor->format;
 
-	dev_dbg(sd->dev, "%s(): pad %x, code %x, res %ux%u\n",
+	dev_dbg(sd->dev, "%s: pad %x, code %x, res %ux%u\n",
 			__func__, fmt->pad, fmt->format.code,
 			fmt->format.width, fmt->format.height);
 
@@ -1720,7 +1705,7 @@ static int ds5_sensor_g_frame_interval(struct v4l2_subdev *sd,
 	fi->interval.numerator = 1;
 	fi->interval.denominator = sensor->config.framerate;
 
-	dev_dbg(sd->dev, "%s(): %s %u\n", __func__, sd->name,
+	dev_dbg(sd->dev, "%s: %s %u\n", __func__, sd->name,
 			fi->interval.denominator);
 
 	return 0;
@@ -1758,13 +1743,12 @@ static int ds5_sensor_s_frame_interval(struct v4l2_subdev *sd,
 	fi->interval.numerator = 1;
 	fi->interval.denominator = framerate;
 
-	dev_dbg(sd->dev, "%s(): %s %u\n", __func__, sd->name, framerate);
+	dev_dbg(sd->dev, "%s: %s %u\n", __func__, sd->name, framerate);
 
 	return 0;
 }
 
-int ds5_sensor_s_stream(struct v4l2_subdev*, int);
-int ds5_sensor_s_stream(struct v4l2_subdev* sd, int on) {
+static int ds5_sensor_s_stream(struct v4l2_subdev* sd, int on) {
 	struct ds5 *state = v4l2_get_subdevdata(sd);
 	u16 streaming, status;
 	int ret = 0;
@@ -1777,18 +1761,17 @@ int ds5_sensor_s_stream(struct v4l2_subdev* sd, int on) {
 	u16 expected_streaming_state;
 	bool ds5_config_done = !on; /* for stop, skip config */
 	bool reset_invalidated = false;
-	int cur_ds5 = atomic_read(ds5_get_reset_gen(state));
 
 	/* Lazy invalidation after HW or deserializer reset.
 	 * Detect gen-counter bumps, clear stale streaming/config/pipe
 	 * state, then update refs.  Must run before the duplicate-call
 	 * guard so a reset-killed stream is not mistaken for "already off".
 	 */
-	if (state->reset_ref_ds5 != cur_ds5) {
+	if (state->handle_reset) {
 		ds5_invalidate_sensor(state, sensor);
 		sensor->streaming = false;
 		reset_invalidated = true;
-		state->reset_ref_ds5 = cur_ds5;
+		state->handle_reset = false;
 	}
 
 	// spare duplicate calls
@@ -2040,40 +2023,39 @@ static int ds5_hw_set_exposure(struct ds5 *state, struct ds5_sensor *sensor, s32
 	return ret;
 }
 
-#define DS5_MAX_LOG_WAIT 200
-#define DS5_MAX_LOG_SLEEP 10
+#define DS5_MAX_LOG_WAIT						200
+#define DS5_MAX_LOG_SLEEP						10
 #define DS5_MAX_LOG_POLL (DS5_MAX_LOG_WAIT / DS5_MAX_LOG_SLEEP)
 
 // TODO: why to use DS5_DEPTH_Y_STREAMS_DT?
-#define DS5_CAMERA_CID_BASE	(V4L2_CTRL_CLASS_CAMERA | DS5_DEPTH_STREAM_DT)
+#define DS5_CAMERA_CID_BASE						(V4L2_CTRL_CLASS_CAMERA | DS5_DEPTH_STREAM_DT)
 
-#define DS5_CAMERA_CID_LOG			(DS5_CAMERA_CID_BASE+0)
-#define DS5_CAMERA_CID_LASER_POWER		(DS5_CAMERA_CID_BASE+1)
-#define DS5_CAMERA_CID_MANUAL_LASER_POWER	(DS5_CAMERA_CID_BASE+2)
+#define DS5_CAMERA_CID_LOG						(DS5_CAMERA_CID_BASE+0)
+#define DS5_CAMERA_CID_LASER_POWER				(DS5_CAMERA_CID_BASE+1)
+#define DS5_CAMERA_CID_MANUAL_LASER_POWER		(DS5_CAMERA_CID_BASE+2)
 #define DS5_CAMERA_DEPTH_CALIBRATION_TABLE_GET	(DS5_CAMERA_CID_BASE+3)
 #define DS5_CAMERA_DEPTH_CALIBRATION_TABLE_SET	(DS5_CAMERA_CID_BASE+4)
 #define DS5_CAMERA_COEFF_CALIBRATION_TABLE_GET	(DS5_CAMERA_CID_BASE+5)
 #define DS5_CAMERA_COEFF_CALIBRATION_TABLE_SET	(DS5_CAMERA_CID_BASE+6)
-#define DS5_CAMERA_CID_FW_VERSION		(DS5_CAMERA_CID_BASE+7)
-#define DS5_CAMERA_CID_GVD			(DS5_CAMERA_CID_BASE+8)
-#define DS5_CAMERA_CID_AE_ROI_GET		(DS5_CAMERA_CID_BASE+9)
-#define DS5_CAMERA_CID_AE_ROI_SET		(DS5_CAMERA_CID_BASE+10)
-#define DS5_CAMERA_CID_AE_SETPOINT_GET		(DS5_CAMERA_CID_BASE+11)
-#define DS5_CAMERA_CID_AE_SETPOINT_SET		(DS5_CAMERA_CID_BASE+12)
-#define DS5_CAMERA_CID_ERB			(DS5_CAMERA_CID_BASE+13)
-#define DS5_CAMERA_CID_EWB			(DS5_CAMERA_CID_BASE+14)
-#define DS5_CAMERA_CID_HWMC			(DS5_CAMERA_CID_BASE+15)
-#define DS5_CAMERA_CID_SYNC_MODE		(DS5_CAMERA_CID_BASE+16)
-
-#define DS5_CAMERA_CID_PWM			(DS5_CAMERA_CID_BASE+22)
+#define DS5_CAMERA_CID_FW_VERSION				(DS5_CAMERA_CID_BASE+7)
+#define DS5_CAMERA_CID_GVD						(DS5_CAMERA_CID_BASE+8)
+#define DS5_CAMERA_CID_AE_ROI_GET				(DS5_CAMERA_CID_BASE+9)
+#define DS5_CAMERA_CID_AE_ROI_SET				(DS5_CAMERA_CID_BASE+10)
+#define DS5_CAMERA_CID_AE_SETPOINT_GET			(DS5_CAMERA_CID_BASE+11)
+#define DS5_CAMERA_CID_AE_SETPOINT_SET			(DS5_CAMERA_CID_BASE+12)
+#define DS5_CAMERA_CID_ERB						(DS5_CAMERA_CID_BASE+13)
+#define DS5_CAMERA_CID_EWB						(DS5_CAMERA_CID_BASE+14)
+#define DS5_CAMERA_CID_HWMC						(DS5_CAMERA_CID_BASE+15)
+#define DS5_CAMERA_CID_SYNC_MODE				(DS5_CAMERA_CID_BASE+16)
+#define DS5_CAMERA_CID_PWM						(DS5_CAMERA_CID_BASE+22)
 
 /* the HWMC will remain for legacy tools compatibility,
  * HWMC_RW used for UVC compatibility
  */
-#define DS5_CAMERA_CID_HWMC_RW		(DS5_CAMERA_CID_BASE+32)
+#define DS5_CAMERA_CID_HWMC_RW					(DS5_CAMERA_CID_BASE+32)
 
 /* HW reset with recovery for GMSL connections */
-#define DS5_CAMERA_CID_HW_RESET		(DS5_CAMERA_CID_BASE+33)
+#define DS5_CAMERA_CID_HW_RESET					(DS5_CAMERA_CID_BASE+33)
 
 #define DS5_HWMC_DATA			0x4900
 #define DS5_HWMC_STATUS			0x4904
@@ -2106,12 +2088,12 @@ static int ds5_hwmc_wait(struct ds5 *state)
 		ret = ds5_read_poll(state, DS5_HWMC_STATUS, &status);
 		if (ret) {
 			dev_dbg(&state->client->dev,
-				"%s(): I2C read failed (%d), retries left: %d\n",
+				"%s: I2C read failed (%d), retries left: %d\n",
 				__func__, ret, retries);
 		}
 	} while (retries-- && (ret || status == DS5_HWMC_STATUS_WIP));
 	dev_dbg(&state->client->dev,
-		"%s(): ret: 0x%x, status: 0x%x\n",
+		"%s: ret: 0x%x, status: 0x%x\n",
 		__func__, ret, status);
 	if (!ret) {
 		if (status == DS5_HWMC_STATUS_ERR) {
@@ -2120,7 +2102,7 @@ static int ds5_hwmc_wait(struct ds5 *state)
 		} else if (status == DS5_HWMC_STATUS_WIP) {
 			ret = -ETIMEDOUT;
 			dev_warn(&state->client->dev,
-				"%s(): HWMC command timed out\n", __func__);
+				"%s: HWMC command timed out\n", __func__);
 		}
 	} else {
 		ret = DS5_HWMC_ERR_LAST;
@@ -2141,7 +2123,7 @@ static int ds5_get_hwmc(struct ds5 *state, unsigned char *data,
 	ret = ds5_hwmc_wait(state);
 	if (ret) {
 		dev_dbg(&state->client->dev,
-			"%s(): HWMC status not clear, ret: %d\n",
+			"%s: HWMC status not clear, ret: %d\n",
 			__func__, ret);
 		if (ret != DS5_HWMC_ERR_LAST) {
 			int *p = (int *)data;
@@ -2162,12 +2144,12 @@ static int ds5_get_hwmc(struct ds5 *state, unsigned char *data,
 
 	if (tmp_len == 0) {
 		dev_err(&state->client->dev,
-			"%s(): HWMC response length is 0\n", __func__);
+			"%s: HWMC response length is 0\n", __func__);
 		return -ENODATA;
 	}
 
 	dev_dbg(&state->client->dev,
-			"%s(): HWMC read len: %d, lrs_len: %d\n",
+			"%s: HWMC read len: %d, lrs_len: %d\n",
 			__func__, tmp_len, tmp_len - 4);
 
 	ds5_raw_read_with_check(state, DS5_HWMC_DATA, data, tmp_len); /* Read response data */
@@ -2181,7 +2163,7 @@ static int ds5_hwmc_send(struct ds5 *state,
 			const struct hwm_cmd *cmd)
 {
 	dev_dbg(&state->client->dev,
-			"%s(): HWMC header: 0x%x, magic: 0x%x, opcode: 0x%x, "
+			"%s: HWMC header: 0x%x, magic: 0x%x, opcode: 0x%x, "
 			"cmdLen: %d, param1: %d, param2: %d, param3: %d, param4: %d\n",
 			__func__, cmd->header, cmd->magic_word, cmd->opcode,
 			cmdLen,	cmd->param1, cmd->param2, cmd->param3, cmd->param4);
@@ -2205,7 +2187,7 @@ static int ds5_set_calibration_data(struct ds5 *state,
 	ret = ds5_hwmc_wait(state);
 	if (ret) {
 		dev_err(&state->client->dev,
-				"%s(): Failed to set calibration table %d, error: %d\n",
+				"%s: failed to set calibration table %d, error: %d\n",
 				__func__, cmd->param1, ret);
 	}
 
@@ -2215,13 +2197,13 @@ static int ds5_set_calibration_data(struct ds5 *state,
 /* HW reset timeout and polling parameters */
 #define DS5_HW_RESET_INITIAL_DELAY_MS	500
 #define DS5_HW_RESET_POLL_INTERVAL_MS	200
-#define DS5_HW_RESET_TIMEOUT_MS		10000
-#define DS5_HW_RESET_MAX_RETRIES	(DS5_HW_RESET_TIMEOUT_MS / DS5_HW_RESET_POLL_INTERVAL_MS)
+#define DS5_HW_RESET_TIMEOUT_MS			10000
+#define DS5_HW_RESET_MAX_RETRIES		(DS5_HW_RESET_TIMEOUT_MS / DS5_HW_RESET_POLL_INTERVAL_MS)
 
 /* Minimum interval between consecutive HW resets (ms).
  * Rapid back-to-back resets degrade the GMSL link.
  */
-#define DS5_HW_RESET_COOLDOWN_MS	2000
+#define DS5_HW_RESET_COOLDOWN_MS		2000
 
 /* Reset readiness handshake:
  * 1) write scratch value before reset,
@@ -2242,13 +2224,12 @@ static int ds5_wait_device_type(struct ds5 *state, u16 *dev_type)
 {
 	int ret = -ETIMEDOUT;
 	int retry;
-	u16 cached_type;
 	u16 probed_type = DS5_DEVICE_TYPE_UNKNOWN;
 
 	for (retry = 0; retry < DS5_HW_RESET_MAX_RETRIES;
 	     retry++, msleep(DS5_HW_RESET_POLL_INTERVAL_MS)) {
-		cached_type = READ_ONCE(state->cached_device_type);
-		if (ds5_is_valid_device_type(cached_type)) {
+		;
+		if (ds5_is_valid_device_type(state->device_type)) {
 			*dev_type = cached_type;
 			return 0;
 		}
@@ -2289,7 +2270,7 @@ static int ds5_hw_reset_with_recovery(struct ds5 *state)
 	unsigned long ds5_last_reset_jiffies = READ_ONCE(state->last_reset_jiffies);
 	unsigned long ts, timeout;
 
-	dev_info(&state->client->dev, "%s(): Initiating HW reset with recovery\n",
+	dev_info(&state->client->dev, "%s: Initiating HW reset with recovery\n",
 		__func__);
 
 	/* 0. Reset cooldown — prevent rapid consecutive resets.
@@ -2306,7 +2287,7 @@ static int ds5_hw_reset_with_recovery(struct ds5 *state)
 			unsigned long remaining = cooldown - elapsed;
 
 			dev_info(&state->client->dev,
-				"%s(): Reset cooldown — last reset %u ms ago, waiting %u ms\n",
+				"%s: reset cooldown — last reset %u ms ago, waiting %u ms\n",
 				__func__, jiffies_to_msecs(elapsed),
 				jiffies_to_msecs(remaining));
 			msleep(jiffies_to_msecs(remaining));
@@ -2321,7 +2302,7 @@ static int ds5_hw_reset_with_recovery(struct ds5 *state)
 	 *    HW reset kills all streams on the camera ASIC, so we must
 	 *    stop and invalidate all peer instances of the same camera.
 	 */
-	dev_info(&state->client->dev, "%s(): stopping streams before reset\n", __func__);
+	dev_info(&state->client->dev, "%s: stopping streams before reset\n", __func__);
 
 	ds5_write(state, DS5_START_STOP_STREAM,	DS5_STREAM_STOP | DS5_STREAM_DEPTH);
 	ds5_write(state, DS5_START_STOP_STREAM,	DS5_STREAM_STOP | DS5_STREAM_RGB);
@@ -2343,7 +2324,7 @@ static int ds5_hw_reset_with_recovery(struct ds5 *state)
 	 *    release-then-reallocate at stream-start time, when the FW
 	 *    has long finished its init (matching v1.0.1.33 behavior).
 	 */
-	atomic_inc(ds5_get_reset_gen(state));
+	state->handle_reset = true;
 	WRITE_ONCE(state->cached_device_type, DS5_DEVICE_TYPE_UNKNOWN);
 
 	/* 3. Scratch one control-status register before reset.
@@ -2355,7 +2336,7 @@ static int ds5_hw_reset_with_recovery(struct ds5 *state)
 	ret = ds5_write(state, ready_reg, DS5_HW_RESET_READY_SCRATCH_VAL);
 	if (ret) {
 		dev_err(&state->client->dev,
-			"%s(): scratch write failed reg 0x%04x (%d)\n",
+			"%s: scratch write failed reg 0x%04x (%d)\n",
 			__func__, ready_reg, ret);
 		return ret;
 	}
@@ -2365,7 +2346,7 @@ static int ds5_hw_reset_with_recovery(struct ds5 *state)
 	ret = ds5_hwmc_send(state, sizeof(reset_cmd), &reset_cmd);
 	if (ret < 0) {
 		dev_err(&state->client->dev,
-			"%s(): Failed to send HW reset command: %d\n",
+			"%s: Failed to send HW reset command: %d\n",
 			__func__, ret);
 		return ret;
 	}
@@ -2398,14 +2379,14 @@ static int ds5_hw_reset_with_recovery(struct ds5 *state)
 		ret = ds5_read_poll(state, DS5_DFU_MAGIC_REG, &ready_status);
 		if (!ret && ready_status == DS5_DFU_MAGIC_LSW) {
 			dev_warn(&state->client->dev,
-				"%s(): Device in DFU/recovery mode after reset\n", __func__);
+				"%s: Device in DFU/recovery mode after reset\n", __func__);
 			state->dfu_dev.dfu_state_flag = DS5_DFU_RECOVERY;
 			return 0;
 		}
 
 		if (!time_before(jiffies, timeout)) {
 			dev_err(&state->client->dev,
-				"%s(): Device isn't ready after %d ms (last control-status: 0x%04x, i2c ret: %d)\n",
+				"%s: Device isn't ready after %d ms (last control-status: 0x%04x, i2c ret: %d)\n",
 				__func__, jiffies_to_msecs(jiffies - ts), ready_status, ret);
 
 			return -ETIMEDOUT;
@@ -2427,31 +2408,31 @@ static int ds5_hw_reset_with_recovery(struct ds5 *state)
 	ret = ds5_wait_device_type(state, &dev_type);
 	if (ret < 0) {
 		dev_err(&state->client->dev,
-			"%s(): device type not ready after reset (ret=%d, val=0x%x)\n",
+			"%s: device type not ready after reset (ret=%d, val=0x%x)\n",
 			__func__, ret, dev_type);
 		return ret;
 	}
 	dev_info(&state->client->dev,
-		"%s(): GMSL link recovered (device type 0x%04x)\n",
+		"%s: GMSL link recovered (device type 0x%04x)\n",
 		__func__, dev_type);
 
 	/* 8. Verify device is operational by reading firmware version */
 	ret = ds5_read(state, DS5_FW_VERSION, &state->fw_version);
 	if (ret < 0) {
 		dev_err(&state->client->dev,
-			"%s(): Failed to read firmware version: %d\n", __func__, ret);
+			"%s: failed to read firmware version: %d\n", __func__, ret);
 		return ret;
 	}
 
 	ret = ds5_read(state, DS5_FW_BUILD, &state->fw_build);
 	if (ret < 0) {
 		dev_err(&state->client->dev,
-			"%s(): Failed to read firmware build: %d\n", __func__, ret);
+			"%s: failed to read firmware build: %d\n", __func__, ret);
 		return ret;
 	}
 
 	dev_info(&state->client->dev,
-		"%s(): HW reset complete. Device type 0x%04x, firmware: %d.%d.%d.%d\n",
+		"%s: HW reset complete. Device type 0x%04x, firmware: %d.%d.%d.%d\n",
 		__func__,
 		dev_type,
 		(state->fw_version >> 8) & 0xff, state->fw_version & 0xff,
@@ -2469,7 +2450,7 @@ static int ds5_s_ctrl(struct v4l2_ctrl *ctrl)
 	int ret = -EINVAL;
 	u16 base = sensor->control_base;
 
-	dev_dbg(&state->client->dev, "%s(): %s - ctrl: %s, value: %d\n",
+	dev_dbg(&state->client->dev, "%s: %s - ctrl: %s, value: %d\n",
 		__func__, ds5_sensor_name[sensor->id], ctrl->name, ctrl->val);
 
 	mutex_lock(&state->lock);
@@ -2498,18 +2479,18 @@ static int ds5_s_ctrl(struct v4l2_ctrl *ctrl)
 			break;
 		case DS5_CAMERA_DEPTH_CALIBRATION_TABLE_SET:
 			dev_dbg(&state->client->dev,
-					"%s(): DS5_CAMERA_DEPTH_CALIBRATION_TABLE_SET \n",	__func__);
+					"%s: DS5_CAMERA_DEPTH_CALIBRATION_TABLE_SET \n",	__func__);
 			if (ctrl->p_new.p) {
 				struct hwm_cmd *calib_cmd;
 				dev_dbg(&state->client->dev,
-						"%s(): table id: 0x%x\n",
+						"%s: table id: 0x%x\n",
 						__func__, *((u8 *)ctrl->p_new.p + 2));
 				if (DEPTH_CALIBRATION_ID == *((u8 *)ctrl->p_new.p + 2)) {
 					calib_cmd = devm_kzalloc(&state->client->dev,
 							sizeof(struct hwm_cmd) + 256, GFP_KERNEL);
 					if (!calib_cmd) {
 						dev_err(&state->client->dev,
-								"%s(): Can't allocate memory for 0x%x\n",
+								"%s: can't allocate memory for 0x%x\n",
 								__func__, ctrl->id);
 						ret = -ENOMEM;
 						break;
@@ -2526,19 +2507,19 @@ static int ds5_s_ctrl(struct v4l2_ctrl *ctrl)
 			break;
 		case DS5_CAMERA_COEFF_CALIBRATION_TABLE_SET:
 			dev_dbg(&state->client->dev,
-					"%s(): DS5_CAMERA_COEFF_CALIBRATION_TABLE_SET \n",
+					"%s: DS5_CAMERA_COEFF_CALIBRATION_TABLE_SET \n",
 					__func__);
 			if (ctrl->p_new.p) {
 				struct hwm_cmd *calib_cmd;
 				dev_dbg(&state->client->dev,
-						"%s(): table id %d\n",
+						"%s: table id %d\n",
 						__func__, *((u8 *)ctrl->p_new.p + 2));
 				if (COEF_CALIBRATION_ID == *((u8 *)ctrl->p_new.p + 2)) {
 					calib_cmd = devm_kzalloc(&state->client->dev,
 							sizeof(struct hwm_cmd) + 512, GFP_KERNEL);
 					if (!calib_cmd) {
 						dev_err(&state->client->dev,
-								"%s(): Can't allocate memory for 0x%x\n",
+								"%s: can't allocate memory for 0x%x\n",
 								__func__, ctrl->id);
 						ret = -ENOMEM;
 						break;
@@ -2570,13 +2551,13 @@ static int ds5_s_ctrl(struct v4l2_ctrl *ctrl)
 		case DS5_CAMERA_CID_AE_SETPOINT_SET:
 			if (ctrl->p_new.p_s32) {
 				struct hwm_cmd *ae_setpoint_cmd;
-				dev_dbg(&state->client->dev, "%s():0x%x \n",
+				dev_dbg(&state->client->dev, "%s: 0x%x \n",
 						__func__, *(ctrl->p_new.p_s32));
 				ae_setpoint_cmd = devm_kzalloc(&state->client->dev,
 						sizeof(struct hwm_cmd) + 4, GFP_KERNEL);
 				if (!ae_setpoint_cmd) {
 					dev_err(&state->client->dev,
-							"%s(): Can't allocate memory for 0x%x\n",
+							"%s: can't allocate memory for 0x%x\n",
 							__func__, ctrl->id);
 					ret = -ENOMEM;
 					break;
@@ -2602,13 +2583,13 @@ static int ds5_s_ctrl(struct v4l2_ctrl *ctrl)
 				size = *(ctrl->p_new.p_u8 + 2) << 8;
 				size |= *(ctrl->p_new.p_u8 + 3);
 
-				dev_dbg(&state->client->dev, "%s(): offset %x, size: %x\n",
+				dev_dbg(&state->client->dev, "%s: offset %x, size: %x\n",
 						__func__, offset, size);
 				len = sizeof(struct hwm_cmd) + size;
 				erb_cmd = devm_kzalloc(&state->client->dev,	len, GFP_KERNEL);
 				if (!erb_cmd) {
 					dev_err(&state->client->dev,
-							"%s(): Can't allocate memory for 0x%x\n",
+							"%s: can't allocate memory for 0x%x\n",
 							__func__, ctrl->id);
 					ret = -ENOMEM;
 					break;
@@ -2621,7 +2602,7 @@ static int ds5_s_ctrl(struct v4l2_ctrl *ctrl)
 					ret = ds5_get_hwmc(state, erb_cmd->Data, len, &size);
 				if (ret) {
 					dev_err(&state->client->dev,
-							"%s(): ERB cmd failed, ret: %d,"
+							"%s: ERB cmd failed, ret: %d,"
 							"requested size: %d, actual size: %d\n",
 							__func__, ret, erb_cmd->param2, size);
 					devm_kfree(&state->client->dev, erb_cmd);
@@ -2633,7 +2614,7 @@ static int ds5_s_ctrl(struct v4l2_ctrl *ctrl)
 				*(ctrl->p_new.p_u8 + 3) = (size & 0x00FF);
 
 				memcpy(ctrl->p_new.p_u8 + 4, erb_cmd->Data + 4, size - 4);
-				dev_dbg(&state->client->dev, "%s(): 0x%x 0x%x 0x%x 0x%x \n",
+				dev_dbg(&state->client->dev, "%s: 0x%x 0x%x 0x%x 0x%x \n",
 						__func__,
 						*(ctrl->p_new.p_u8),
 						*(ctrl->p_new.p_u8+1),
@@ -2653,7 +2634,7 @@ static int ds5_s_ctrl(struct v4l2_ctrl *ctrl)
 				size = *((u8 *)ctrl->p_new.p_u8 + 2) << 8;
 				size |= *((u8 *)ctrl->p_new.p_u8 + 3);
 
-				dev_dbg(&state->client->dev, "%s():0x%x 0x%x 0x%x 0x%x\n",
+				dev_dbg(&state->client->dev, "%s:0x%x 0x%x 0x%x 0x%x\n",
 						__func__,
 						*((u8 *)ctrl->p_new.p_u8),
 						*((u8 *)ctrl->p_new.p_u8 + 1),
@@ -2665,7 +2646,7 @@ static int ds5_s_ctrl(struct v4l2_ctrl *ctrl)
 						GFP_KERNEL);
 				if (!ewb_cmd) {
 					dev_err(&state->client->dev,
-							"%s(): Can't allocate memory for 0x%x\n",
+							"%s: Can't allocate memory for 0x%x\n",
 							__func__, ctrl->id);
 					ret = -ENOMEM;
 					break;
@@ -2680,7 +2661,7 @@ static int ds5_s_ctrl(struct v4l2_ctrl *ctrl)
 					ret = ds5_hwmc_wait(state);
 				if (ret) {
 					dev_err(&state->client->dev,
-							"%s(): EWB cmd failed, ret: %d,"
+							"%s: EWB cmd failed, ret: %d,"
 							"requested size: %d, actual size: %d\n",
 							__func__, ret, ewb_cmd->param2, size);
 					devm_kfree(&state->client->dev, ewb_cmd);
@@ -2717,7 +2698,7 @@ static int ds5_s_ctrl(struct v4l2_ctrl *ctrl)
 				/* Check if this is a HW reset command (opcode 0x20) */
 				if (cmd->opcode == 0x20) {
 					dev_info(&state->client->dev,
-							"%s(): HW reset detected via HWMC_RW, using recovery path\n",
+							"%s: HW reset detected via HWMC_RW, using recovery path\n",
 							__func__);
 				} else {
 					ret = ds5_hwmc_send(state, size + 4, cmd);
@@ -2725,16 +2706,16 @@ static int ds5_s_ctrl(struct v4l2_ctrl *ctrl)
 			}
 			break;
 		case DS5_CAMERA_CID_HW_RESET:
-			dev_info(&state->client->dev, "%s(): HW reset requested via V4L2 control\n",
+			dev_info(&state->client->dev, "%s: HW reset requested via V4L2 control\n",
 					__func__);
 			ret = ds5_hw_reset_with_recovery(state);
 			break;
 		case DS5_CAMERA_CID_SYNC_MODE:
-			dev_info(&state->client->dev, "%s(): XU SYNC_MODE control received, value: %d\n",
+			dev_info(&state->client->dev, "%s: XU SYNC_MODE control received, value: %d\n",
 					__func__, ctrl->val);
 			if (sensor->id == DS5_PAD_DEPTH) {
 				ret = ds5_write(state, base | DS5_CAMERA_SYNC_MODE, ctrl->val);
-				dev_info(&state->client->dev, "%s(): SYNC_MODE command passed to FW, addr: 0x%x, value: %d, ret: %d\n",
+				dev_info(&state->client->dev, "%s: SYNC_MODE command passed to FW, addr: 0x%x, value: %d, ret: %d\n",
 						__func__, base | DS5_CAMERA_SYNC_MODE, ctrl->val, ret);
 			}
 			break;
@@ -2760,7 +2741,7 @@ static int ds5_get_calibration_data(struct ds5 *state, enum table_id id,
 	cmd = devm_kzalloc(&state->client->dev,
 			sizeof(struct hwm_cmd) + length + 4, GFP_KERNEL);
 	if (!cmd) {
-		dev_err(&state->client->dev, "%s(): Can't allocate memory\n", __func__);
+		dev_err(&state->client->dev, "%s: can't allocate memory\n", __func__);
 		return -ENOMEM;
 	}
 
@@ -2776,7 +2757,7 @@ static int ds5_get_calibration_data(struct ds5 *state, enum table_id id,
 
 	if (ret) {
 		dev_err(&state->client->dev,
-				"%s(): Failed to get calibration table %d, error: %d\n",
+				"%s: failed to get calibration table %d, error: %d\n",
 				__func__, id, ret);
 		devm_kfree(&state->client->dev, cmd);
 		return ret;
@@ -2809,7 +2790,7 @@ static int ds5_gvd(struct ds5 *state, unsigned char *data)
 	ret = ds5_hwmc_wait(state);
 	if (ret) {
 		dev_err(&state->client->dev,
-			"%s(): Failed to read GVD, error: %d\n",
+			"%s: failed to read GVD, error: %d\n",
 			__func__, ret);
 		return -EIO;
 	}
@@ -2830,7 +2811,7 @@ static int ds5_g_volatile_ctrl(struct v4l2_ctrl *ctrl)
 	u16 base = sensor->control_base;
 	u16 reg;
 
-	dev_dbg(&state->client->dev, "%s(): %s - ctrl: %s \n",
+	dev_dbg(&state->client->dev, "%s: %s - ctrl: %s \n",
 		__func__, ds5_sensor_name[sensor->id], ctrl->name);
 
 	switch (ctrl->id) {
@@ -2890,7 +2871,7 @@ static int ds5_g_volatile_ctrl(struct v4l2_ctrl *ctrl)
 			return ret;
 
 		ret = ds5_raw_read(state, DS5_HWMC_RESP_LEN, &data, sizeof(data)); /* Read response length */
-		dev_dbg(&state->client->dev, "%s(): log size 0x%x\n", __func__, data);
+		dev_dbg(&state->client->dev, "%s: log size 0x%x\n", __func__, data);
 		if (ret < 0)
 			return ret;
 		if (!data)
@@ -2925,7 +2906,7 @@ static int ds5_g_volatile_ctrl(struct v4l2_ctrl *ctrl)
 			ae_roi_cmd = devm_kzalloc(&state->client->dev, len, GFP_KERNEL);
 			if (!ae_roi_cmd) {
 				dev_err(&state->client->dev,
-					"%s(): Can't allocate memory for 0x%x\n",
+					"%s: can't allocate memory for 0x%x\n",
 					__func__, ctrl->id);
 				ret = -ENOMEM;
 				break;
@@ -2950,7 +2931,7 @@ static int ds5_g_volatile_ctrl(struct v4l2_ctrl *ctrl)
 		ae_setpoint_cmd = devm_kzalloc(&state->client->dev,	len, GFP_KERNEL);
 		if (!ae_setpoint_cmd) {
 			dev_err(&state->client->dev,
-					"%s(): Can't allocate memory for 0x%x\n",
+					"%s: Can't allocate memory for 0x%x\n",
 					__func__, ctrl->id);
 			ret = -ENOMEM;
 			break;
@@ -2963,7 +2944,7 @@ static int ds5_g_volatile_ctrl(struct v4l2_ctrl *ctrl)
 		}
 		ret = ds5_get_hwmc(state, ae_setpoint_cmd->Data, len, &dataLen);
 		memcpy(ctrl->p_new.p_s32, ae_setpoint_cmd->Data + 4, 4);
-		dev_dbg(&state->client->dev, "%s(): len: %d, 0x%x \n",
+		dev_dbg(&state->client->dev, "%s: len: %d, 0x%x \n",
 			__func__, dataLen, *(ctrl->p_new.p_s32));
 		devm_kfree(&state->client->dev, ae_setpoint_cmd);
 		}
@@ -3263,7 +3244,7 @@ static int ds5_open(struct v4l2_subdev *sd, struct v4l2_subdev_fh *fh)
 {
 	struct ds5 *state = v4l2_get_subdevdata(sd);
 
-	dev_dbg(sd->dev, "%s(): %s (%p)\n", __func__, sd->name, fh);
+	dev_dbg(sd->dev, "%s: %s (%p)\n", __func__, sd->name, fh);
 
 	mutex_lock(&state->lock);
 	if (state->dfu_dev.dfu_state_flag)
@@ -3282,7 +3263,7 @@ static int ds5_close(struct v4l2_subdev *sd, struct v4l2_subdev_fh *fh)
 {
 	struct ds5 *state = v4l2_get_subdevdata(sd);
 
-	dev_dbg(sd->dev, "%s(): %s (%p)\n", __func__, sd->name, fh);
+	dev_dbg(sd->dev, "%s: %s (%p)\n", __func__, sd->name, fh);
 	mutex_lock(&state->lock);
 	state->dfu_dev.device_open_count--;
 	mutex_unlock(&state->lock);
@@ -3576,10 +3557,10 @@ static int ds5_fixed_configuration(struct i2c_client *client, struct ds5 *state)
 	if (ret < 0)
 		return ret;
 
-	dev_dbg(&client->dev, "%s(): cfg0 %x %ux%u cfg0_md %x %ux%u\n", __func__,
+	dev_dbg(&client->dev, "%s: cfg0 %x %ux%u cfg0_md %x %ux%u\n", __func__,
 		 cfg0, dw, dh, cfg0_md, yw, yh);
 
-	dev_dbg(&client->dev, "%s(): cfg1 %x %ux%u cfg1_md %x %ux%u\n", __func__,
+	dev_dbg(&client->dev, "%s: cfg1 %x %ux%u cfg1_md %x %ux%u\n", __func__,
 		 cfg1, dw, dh, cfg1_md, yw, yh);
 
 	dev_type = ds5_dev_type(state, dev_type);
@@ -3607,7 +3588,7 @@ static int ds5_fixed_configuration(struct i2c_client *client, struct ds5 *state)
 					break;
 				default:
 					dev_warn(&client->dev,
-							"%s(): unknown device type 0x%x, using D43X format tables\n",
+							"%s: unknown device type 0x%x, using D43X format tables\n",
 							__func__, dev_type);
 					sensor->formats = ds5_depth_formats_d43x;
 			}
@@ -3744,7 +3725,7 @@ static int ds5_dfu_wait_for_status(struct ds5 *state)
 		ds5_read(state, 0x5000, &status);
 		if (status == 0x0001 || status == 0x0002) {
 			dev_err(&state->client->dev,
-					"%s(): dfu failed status(0x%4x)\n",
+					"%s: dfu failed status(0x%4x)\n",
 					__func__, status);
 			ret = -EREMOTEIO;
 			break;
@@ -3789,7 +3770,7 @@ static int ds5_dfu_wait_for_get_dfu_status(struct ds5 *state,
 			ds5_read_with_check(state, 0x5000, &status);
 			if (status == 0x0001) {
 				dev_err(&state->client->dev,
-						"%s(): Write status error I2C_STATUS_ERROR(1)\n",
+						"%s: write status error I2C_STATUS_ERROR(1)\n",
 						__func__);
 				return -EINVAL;
 			} else
@@ -3801,13 +3782,13 @@ static int ds5_dfu_wait_for_get_dfu_status(struct ds5 *state,
 		ds5_read_with_check(state, 0x5004, &dfu_state_len);
 		if (dfu_state_len != DFU_WAIT_RET_LEN) {
 			dev_err(&state->client->dev,
-					"%s(): Wrong answer len (%d)\n", __func__, dfu_state_len);
+					"%s: wrong answer len (%d)\n", __func__, dfu_state_len);
 			return -EINVAL;
 		}
 		ds5_raw_read_with_check(state, 0x4e00, &dfu_asw_buf, DFU_WAIT_RET_LEN);
 		if (dfu_asw_buf[0]) {
 			dev_err(&state->client->dev,
-					"%s(): Wrong dfu_status (%d)\n", __func__, dfu_asw_buf[0]);
+					"%s: Wrong dfu_status (%d)\n", __func__, dfu_asw_buf[0]);
 			return -EINVAL;
 		}
 		dfu_wr_wait_msec = (((unsigned int)dfu_asw_buf[3]) << 16)
@@ -3817,7 +3798,7 @@ static int ds5_dfu_wait_for_get_dfu_status(struct ds5 *state,
 
 	if (dfu_asw_buf[4] != exp_state) {
 		dev_notice(&state->client->dev,
-				"%s(): Wrong dfu_state (%d) while expected(%d)\n",
+				"%s: wrong dfu_state (%d) while expected(%d)\n",
 				__func__, dfu_asw_buf[4], exp_state);
 		ret = -EINVAL;
 	}
@@ -3839,7 +3820,7 @@ static int ds5_dfu_get_dev_info(struct ds5 *state, struct __fw_status *buf)
 		ds5_raw_read_with_check(state, 0x4e00, buf, len);
 	} else {
 		dev_err(&state->client->dev,
-				"%s(): Wrong state size (%d)\n",
+				"%s: wrong state size (%d)\n",
 				__func__, len);
 		ret = -EINVAL;
 	}
@@ -3855,11 +3836,11 @@ static int ds5_dfu_detach(struct ds5 *state)
 	ret = ds5_dfu_wait_for_get_dfu_status(state, dfuIDLE);
 	if (!ret)
 		ret = ds5_dfu_get_dev_info(state, &buf);
-	dev_notice(&state->client->dev, "%s():DFU ver (0x%x) received\n",
+	dev_notice(&state->client->dev, "%s: DFU ver (0x%x) received\n",
 			__func__, buf.DFU_version);
-	dev_notice(&state->client->dev, "%s():FW last version (0x%x) received\n",
+	dev_notice(&state->client->dev, "%s: FW last version (0x%x) received\n",
 			__func__, buf.FW_lastVersion);
-	dev_notice(&state->client->dev, "%s():FW status (%s)\n",
+	dev_notice(&state->client->dev, "%s: FW status (%s)\n",
 			__func__, buf.DFU_isLocked ? "locked" : "unlocked");
 	return ret;
 };
@@ -3924,7 +3905,7 @@ static ssize_t ds5_dfu_device_write(struct file *flip,
 	case DS5_DFU_OPEN:
 		ret = ds5_dfu_switch_to_dfu(state);
 		if (ret < 0) {
-			dev_err(&state->client->dev, "%s(): Switch to dfu failed (%d)\n",
+			dev_err(&state->client->dev, "%s: switch to dfu failed (%d)\n",
 					__func__, ret);
 			goto dfu_write_error;
 		}
@@ -3933,7 +3914,7 @@ static ssize_t ds5_dfu_device_write(struct file *flip,
 	case DS5_DFU_RECOVERY:
 		ret = ds5_dfu_detach(state);
 		if (ret < 0) {
-			dev_err(&state->client->dev, "%s(): Detach failed (%d)\n",
+			dev_err(&state->client->dev, "%s: detach failed (%d)\n",
 					__func__, ret);
 			goto dfu_write_error;
 		}
@@ -3978,7 +3959,7 @@ static ssize_t ds5_dfu_device_write(struct file *flip,
 			state->dfu_dev.dfu_state_flag = DS5_DFU_DONE;
 		}
 		if (len)
-			dev_notice(&state->client->dev, "%s(): DFU block (%d) bytes written\n",
+			dev_notice(&state->client->dev, "%s: DFU block (%d) bytes written\n",
 				__func__, (int)len);
 		break;
 	}
@@ -4033,7 +4014,7 @@ static int ds5_dfu_device_open(struct inode *inode, struct file *file)
 		mutex_unlock(&state->lock);
 		return 0;
 	}
-	dev_dbg(&state->client->dev, "%s(): i2c-%d bus_clk = %d, set %d\n",
+	dev_dbg(&state->client->dev, "%s: i2c-%d bus_clk = %d, set %d\n",
 			__func__,
 			i2c_adapter_id(parent),
 			i2c_get_adapter_bus_clk_rate(parent),
@@ -4060,7 +4041,7 @@ static void ds5_adjust_sync_mode_control(struct i2c_client *client, struct ds5 *
 
 	ret = ds5_read(state, DS5_DEVICE_TYPE, &dev_type);
 	if (ret < 0) {
-		dev_warn(&client->dev, "%s(): Failed to read device type\n", __func__);
+		dev_warn(&client->dev, "%s: failed to read device type\n", __func__);
 		return;
 	}
 
@@ -4105,7 +4086,7 @@ static void ds5_adjust_sync_mode_control(struct i2c_client *client, struct ds5 *
 
 int ds5_chrdev_init(struct i2c_client *client, struct ds5 *state);
 
-static int ds5_sensor_init(int id, struct ds5 *state)
+static int ds5_sensor_init(int id, struct fwnode_handle *fwnode, struct ds5 *state)
 {
 	struct i2c_client *client = state->client;
 	struct ds5_sensor *sensor = &state->sensor[id];
@@ -4139,6 +4120,7 @@ static int ds5_sensor_init(int id, struct ds5 *state)
 	media_entity_pads_init(entity, DS5_PAD_COUNT, pad);
 	v4l2_i2c_subdev_init(sd, state->client, &ds5_camera_ops);
 	sd->owner = THIS_MODULE;
+	sd->fwnode = fwnode;
 	sd->internal_ops = &ds5_internal_ops;
 	sd->grp_id = *dev_num;
 	entity->obj_type = MEDIA_ENTITY_TYPE_V4L2_SUBDEV;
@@ -4220,11 +4202,16 @@ static int ds5_hw_init(struct i2c_client *c, struct ds5 *state)
 
 static int ds5_v4l_init(struct i2c_client *client, struct ds5 *state)
 {
+	struct fwnode_handle *node = state->client->dev.fwnode;
+	struct fwnode_handle *child = NULL;
 	int ret;
 
 	ret = ds5_parse_cam(client, state);
-	for (int id = DS5_PAD_DEPTH; id < DS5_PAD_COUNT; id++)
-		ret = ds5_sensor_init(id, state);
+	for (int id = DS5_PAD_DEPTH; id < DS5_PAD_COUNT; id++) {
+		fwnode_get_next_child_node(node, child);
+		if (!child) break;
+		ret = ds5_sensor_init(id, child, state);
+	}
 
 	/* Adjust sync_mode control range based on device type - must be done
 	 * after ds5_mux_init() creates the control */
@@ -4263,7 +4250,7 @@ static int ds5_dfu_device_release(struct inode *inode, struct file *file)
 		mutex_unlock(&state->lock);
 		return 0;
 	}
-	dev_dbg(&state->client->dev, "%s(): i2c-%d bus_clk %d, restore to %d\n",
+	dev_dbg(&state->client->dev, "%s: i2c-%d bus_clk %d, restore to %d\n",
 			__func__, i2c_adapter_id(parent),
 			i2c_get_adapter_bus_clk_rate(parent),
 			state->dfu_dev.bus_clk_rate);
@@ -4278,7 +4265,7 @@ static int ds5_dfu_device_release(struct inode *inode, struct file *file)
 	} while (retry-- && ret != 0 );
 	if (ret) {
 		dev_warn(&state->client->dev,
-			"%s(): no communication with d4xx\n", __func__);
+			"%s: no communication with d4xx\n", __func__);
 		mutex_unlock(&state->lock);
 		return ret;
 	}
@@ -4504,8 +4491,8 @@ static int ds5_probe(struct i2c_client *c
 		)
 {
 	struct ds5 *state = devm_kzalloc(&c->dev, sizeof(*state), GFP_KERNEL);
-	u16 rec_state;
 	int ret, err = 0;
+	u16 magic = 0;
 
 	if (!state) return -ENOMEM;
 
@@ -4539,8 +4526,6 @@ static int ds5_probe(struct i2c_client *c
 		goto e_regulator;
 	}
 
-	state->reset_ref_ds5 = atomic_read(ds5_get_reset_gen(state));
-
 	// Verify communication
 	ret = ds5_read(state, DS5_FW_VERSION, &state->fw_version);
 	if (ret < 0) {
@@ -4560,19 +4545,17 @@ static int ds5_probe(struct i2c_client *c
 	 * FW_VERSION becomes readable earlier than DS5_DEVICE_TYPE, while later
 	 * probe code depends on DEVICE_TYPE to pick the correct format tables.
 	 */
-	ret = ds5_wait_device_type(state, &rec_state);
-	if (ret < 0) {
+	ret = ds5_wait_device_type(state, &state->dev_type);
+	if (ret) {
 		dev_err(&c->dev,
-			"%s: device type not ready after reset: %d (last val 0x%x)\n",
-			__func__, ret, rec_state);
+			"%s: can not read device type\n", __func__);
 		goto e_chardev;
 	}
 
-	ret = ds5_read(state, DS5_DFU_MAGIC_REG, &rec_state);
-	if (ret < 0)
-		rec_state = 0;
+	ret = ds5_read(state, DS5_DFU_MAGIC_REG, &magic);
+	if (ret) magic = 0;
 
-	if (rec_state == DS5_DFU_MAGIC_LSW) {
+	if (magic == DS5_DFU_MAGIC_LSW) {
 		dev_info(&c->dev, "%s: D4XX recovery state\n", __func__);
 		state->dfu_dev.dfu_state_flag = DS5_DFU_RECOVERY;
 		/* Override I2C drvdata with state for use in remove function */
@@ -4582,14 +4565,12 @@ static int ds5_probe(struct i2c_client *c
 	ds5_read_with_check(state, DS5_FW_VERSION, &state->fw_version);
 	ds5_read_with_check(state, DS5_FW_BUILD, &state->fw_build);
 
-	dev_info(&c->dev, "%s: camera firmware build: %d.%d.%d.%d\n",
-			__func__,
+	dev_info(&c->dev, "%s: camera firmware build: %d.%d.%d.%d\n", __func__,
 			(state->fw_version >> 8) & 0xff, state->fw_version & 0xff,
 			(state->fw_build >> 8) & 0xff, state->fw_build & 0xff);
 
 	ret = ds5_v4l_init(c, state);
-	if (ret < 0)
-		goto e_chardev;
+	if (ret < 0) goto e_chardev;
 
 	dev_info(&c->dev, "%s: driver version: %s\n", __func__,
 		THIS_MODULE->version ? THIS_MODULE->version : "N/A");
