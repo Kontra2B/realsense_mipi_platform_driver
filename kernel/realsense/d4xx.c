@@ -4111,7 +4111,7 @@ static int ds5_sensor_init(int id, struct ds5 *state)
 	struct ds5_sensor *sensor = &state->sensor[id];
 	struct v4l2_subdev *sd = &sensor->sd;
 	struct media_entity *entity = &sensor->sd.entity;
-	struct media_pad *pad = sensor->pad;
+	struct media_pad *pad = &sensor->pad;
 	dev_t *dev_num = &state->client->dev.devt;
 	int ret;
 #ifndef CONFIG_OF
@@ -4136,7 +4136,7 @@ static int ds5_sensor_init(int id, struct ds5 *state)
 	sd->flags |= V4L2_SUBDEV_FL_HAS_DEVNODE;
 	pad->flags = MEDIA_PAD_FL_SOURCE;
 
-	media_entity_pads_init(entity, DS5_PAD_COUNT, sensor->pad);
+	media_entity_pads_init(entity, DS5_PAD_COUNT, pad);
 	v4l2_i2c_subdev_init(sd, state->client, &ds5_camera_ops);
 	sd->owner = THIS_MODULE;
 	sd->internal_ops = &ds5_internal_ops;
