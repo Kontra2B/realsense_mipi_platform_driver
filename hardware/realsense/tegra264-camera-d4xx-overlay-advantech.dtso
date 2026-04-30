@@ -298,59 +298,53 @@
 						};
 					};
 
-					sensor: ds5@10 {
+					ds5@10 {
 						status = "okay";
 						reg = <0x10>;
 						compatible = "intel,d4xx";
 						use_sensor_mode_id = "true";
 						num_lanes = "2";
-						ports {
+						depth {
+							mode {
+								pixel_t = "grey_y16";
+								num_lanes = "2";
+								csi_pixel_bit_depth = "16";
+								active_w = "640";
+								active_h = "480";
+								tegra_sinterface = "serial_b";
+								mclk_khz = "24000";
+								pix_clk_hz = "74250000";
+								line_length = "1280"; /* 2200 */
+							};
+							port {
+								sensor_depth: endpoint {
+									remote-endpoint = <&serializer_sink_depth>;
+								};
+							};
+						}
+						color {
 							#address-cells = <1>;
 							#size-cells = <0>;
-
-							port@0 {
-								reg = <0>;
-								sensor_depth: endpoint {
-									port-index = <0>;
-									bus-width = <2>;
-									remote-endpoint = <&serializer_sink_depth>;
-									mode {
-										pixel_t = "grey_y16";
-										num_lanes = "2";
-										csi_pixel_bit_depth = "16";
-										active_w = "640";
-										active_h = "480";
-										tegra_sinterface = "serial_b";
-										mclk_khz = "24000";
-										pix_clk_hz = "74250000";
-										line_length = "1280"; /* 2200 */
-									};
-								};
+							mode {
+								pixel_t = "grey_y16";
+								num_lanes = "2";
+								csi_pixel_bit_depth = "16";
+								active_w = "1920";
+								active_h = "1080";
+								tegra_sinterface = "serial_e";
+								mclk_khz = "24000";
+								pix_clk_hz = "74250000";
+								line_length = "1280"; /* 2200 */
 							};
-							port@1 {
-								reg = <1>;
+							port {
 								sensor_rgb: endpoint {
-									port-index = <1>;
-									bus-width = <2>;
 									remote-endpoint = <&serializer_sink_rgb>;
-									mode {
-										pixel_t = "grey_y16";
-										num_lanes = "2";
-										csi_pixel_bit_depth = "16";
-										active_w = "1920";
-										active_h = "1080";
-										tegra_sinterface = "serial_e";
-										mclk_khz = "24000";
-										pix_clk_hz = "74250000";
-										line_length = "1280"; /* 2200 */
-									};
 								};
 							};
-							port@2 {
-								reg = <2>;
+						}
+						infrared {
+							port {
 								sensor_ir: endpoint {
-									port-index = <2>;
-									bus-width = <2>;
 									remote-endpoint = <&serializer_sink_ir>;
 									mode {
 										pixel_t = "grey_y16";
@@ -365,11 +359,10 @@
 									};
 								};
 							};
-							port@3 {
-								reg = <3>;
+						};
+						imu {
+							port {
 								sensor_imu: endpoint {
-									port-index = <3>;
-									bus-width = <2>;
 									remote-endpoint = <&serializer_sink_imu>;
 									/* mode0: Y8, mode1: depth D16 */
 									mode {
