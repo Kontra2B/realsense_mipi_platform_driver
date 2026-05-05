@@ -141,20 +141,21 @@ enum ds5_device_type {
 	DS5_DEVICE_TYPE_UNKNOWN,
 	DS5_DEVICE_1,
 	DS5_DEVICE_2,
-	DS5_DEVICE_TYPE_FIRST,
+	DS5_DEVICE_3,
 	DS5_DEVICE_TYPE_D46X,
+	DS5_DEVICE_TYPE_FIRST = DS5_DEVICE_TYPE_D46X,
 	DS5_DEVICE_TYPE_D43X,
 	DS5_DEVICE_TYPE_D45X,
 	DS5_DEVICE_TYPE_D41X,
 	DS5_DEVICE_TYPE_D40X,
-	DS5_DEVICE_TYPE_LAST
+	DS5_DEVICE_TYPE_LAST = DS5_DEVICE_TYPE_D40X
 };
 
 char *ds5_device_name[] = {
 	[DS5_DEVICE_TYPE_UNKNOWN] = "Unknown",
 	[DS5_DEVICE_1] = NULL,
 	[DS5_DEVICE_2] = NULL,
-	[DS5_DEVICE_TYPE_FIRST] = NULL,
+	[DS5_DEVICE_3] = NULL,
 	[DS5_DEVICE_TYPE_D40X] = "D40X",
 	[DS5_DEVICE_TYPE_D41X] = "D41X",
 	[DS5_DEVICE_TYPE_D45X] = "D45X",
@@ -471,8 +472,8 @@ static inline u16 ds5_dev_type(struct ds5 *state, u16 dev_type)
 
 static bool ds5_is_valid_device_type(u16 dev_type)
 {
-	return (dev_type > DS5_DEVICE_TYPE_FIRST
-			&& dev_type < DS5_DEVICE_TYPE_LAST);
+	return !(dev_type < DS5_DEVICE_TYPE_FIRST
+			|| dev_type > DS5_DEVICE_TYPE_LAST);
 }
 
 #if LINUX_VERSION_CODE > KERNEL_VERSION(5, 15, 136)
@@ -2224,26 +2225,23 @@ static int ds5_wait_device_type(struct ds5 *state, u16 *dev_type)
 {
 	int ret = -ETIMEDOUT;
 	int retry;
-	u16 probed_type = DS5_DEVICE_TYPE_UNKNOWN;
 
 	for (retry = 0; retry < DS5_HW_RESET_MAX_RETRIES;
 	     retry++, msleep(DS5_HW_RESET_POLL_INTERVAL_MS)) {
 		;
 		if (ds5_is_valid_device_type(state->device_type)) {
-			*dev_type = cached_type;
+			if (dev_type) *dev_type = state->device_type;
 			return 0;
 		}
 
-		ret = ds5_read_poll(state, DS5_DEVICE_TYPE, &probed_type);
-		if (!ret && ds5_is_valid_device_type(probed_type)) {
-			WRITE_ONCE(state->cached_device_type, probed_type);
-			*dev_type = probed_type;
+		ret = ds5_read_poll(state, DS5_DEVICE_TYPE, &state->device_type);
+		if (!ret && ds5_is_valid_device_type(state->device_type)) {
+			if (dev_type) *dev_type = state->device_type;
 			return 0;
 		}
 	}
 
-	*dev_type = probed_type;
-	return ret ? ret : -ETIMEDOUT;
+	return ret;
 }
 
 /*
@@ -2325,7 +2323,7 @@ static int ds5_hw_reset_with_recovery(struct ds5 *state)
 	 *    has long finished its init (matching v1.0.1.33 behavior).
 	 */
 	state->handle_reset = true;
-	WRITE_ONCE(state->cached_device_type, DS5_DEVICE_TYPE_UNKNOWN);
+	state->device_type = DS5_DEVICE_TYPE_UNKNOWN;
 
 	/* 3. Scratch one control-status register before reset.
 	 *    FW restores them to default 0x0000 only after reset completes.
@@ -4144,7 +4142,7 @@ static int ds5_sensor_init(int id, struct fwnode_handle *fwnode, struct ds5 *sta
 	entity->function = MEDIA_ENT_F_CAM_SENSOR;
 
 	v4l2_i2c_subdev_init(sd, state->client, &ds5_camera_ops);
-	ret = v4l2_device_register_subdev(sd->v4l2_dev, sd);
+	ret = v4l2_async_register_subdev(sd);
 	if (ret) {
 		dev_err(sd->dev, "%s: failed to register sensor subdevice: %s\n",
 				__func__, ds5_sensor_name[id]);
@@ -4500,7 +4498,7 @@ static int ds5_probe(struct i2c_client *c
 
 	mutex_init(&state->lock);
 	state->client = c;
-	state->cached_device_type = DS5_DEVICE_TYPE_UNKNOWN;
+	state->device_type = DS5_DEVICE_TYPE_UNKNOWN;
 	state->variant = ds5_variants;
 #ifdef CONFIG_OF
 	state->vcc = devm_regulator_get(&c->dev, "vcc");
@@ -4545,7 +4543,7 @@ static int ds5_probe(struct i2c_client *c
 	 * FW_VERSION becomes readable earlier than DS5_DEVICE_TYPE, while later
 	 * probe code depends on DEVICE_TYPE to pick the correct format tables.
 	 */
-	ret = ds5_wait_device_type(state, &state->dev_type);
+	ret = ds5_wait_device_type(state, NULL);
 	if (ret) {
 		dev_err(&c->dev,
 			"%s: can not read device type\n", __func__);
