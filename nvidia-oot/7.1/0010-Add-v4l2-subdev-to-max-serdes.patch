@@ -1,5 +1,5 @@
 diff --git a/drivers/media/i2c/max96712.c b/drivers/media/i2c/max96712.c
-index 2bf1f6d1..b47b5d68 100644
+index 2bf1f6d1..e37fe512 100644
 --- a/drivers/media/i2c/max96712.c
 +++ b/drivers/media/i2c/max96712.c
 @@ -73,17 +73,24 @@
@@ -24,7 +24,7 @@ index 2bf1f6d1..b47b5d68 100644
 +	   int pwdn_gpio;
 +	   int link_mask;
 +	   struct v4l2_subdev sd;
-+	   struct media_pad pad[MAX96712_MAX_LINKS];
++	   struct media_pad pad[MAX96712_MAX_LINKS + 1];
 +       struct regmap *regmap;
 +       const char *channel;
 +	   bool force_clk0;
@@ -167,7 +167,7 @@ index 2bf1f6d1..b47b5d68 100644
  	if (!fp) {
  		dev_err(&i2c_client->dev, "%s: debugfs create file failed\n",
  			__func__);
-@@ -310,14 +272,96 @@ static int max96712_debugfs_init(const char *dir_name,
+@@ -310,14 +272,107 @@ static int max96712_debugfs_init(const char *dir_name,
  	return 0;
  }
  
@@ -183,8 +183,19 @@ index 2bf1f6d1..b47b5d68 100644
 +struct v4l2_subdev_ops max_ops;
 +static int max_sdev_register(struct max96712 *priv)
 +{
++	struct media_entity *entity = &priv->sd.entity;
++	struct media_pad *pad = priv->pad;
 +	int ret;
 +	dev_info(&priv->i2c_client->dev, "%s called\n", __func__);
++	priv->sd.flags |= V4L2_SUBDEV_FL_HAS_DEVNODE;
++	for (int i = 1; i < MAX96712_MAX_LINKS + 1; i++)
++		pad[i].index = MEDIA_PAD_FL_SOURCE;
++	pad->flags = MEDIA_PAD_FL_SINK;
++
++	media_entity_pads_init(entity, MAX96712_MAX_LINKS + 1, pad);
++	entity->obj_type = MEDIA_ENTITY_TYPE_V4L2_SUBDEV;
++	entity->function = MEDIA_ENT_F_VID_MUX;
++
 +	v4l2_subdev_init(&priv->sd, &max_ops);
 +	priv->sd.owner = THIS_MODULE;
 +	ret = v4l2_async_register_subdev(&priv->sd);
@@ -266,7 +277,7 @@ index 2bf1f6d1..b47b5d68 100644
  	.s_routing = NULL,
  	.s_crystal_freq = NULL,
  	.g_std = NULL,
-@@ -338,104 +382,53 @@ struct v4l2_subdev_video_ops max96712_video_ops = {
+@@ -338,104 +393,53 @@ struct v4l2_subdev_video_ops max96712_video_ops = {
  	.post_streamoff = NULL
  };
  
@@ -407,7 +418,7 @@ index 2bf1f6d1..b47b5d68 100644
  		if (err != 0)
  			break;
  	}
-@@ -443,30 +436,11 @@ static int max96712_set_registers(struct max96712 *priv, struct reg_pair *map, u
+@@ -443,30 +447,11 @@ static int max96712_set_registers(struct max96712 *priv, struct reg_pair *map, u
  	return err;
  }
  
@@ -440,7 +451,7 @@ index 2bf1f6d1..b47b5d68 100644
  	int err = 0;
  
  	/* dser_pipe_id will be connected to ser_pipe_id of link_id */
-@@ -480,20 +454,21 @@ static int __max96712_bind_ser_to_dser_pipe(struct device *dev, int dser_pipe_id
+@@ -480,20 +465,21 @@ static int __max96712_bind_ser_to_dser_pipe(struct device *dev, int dser_pipe_id
  	if (dser_pipe_id < 0 || dser_pipe_id >= MAX96712_MAX_PIPES || link_id >= MAX96712_MAX_LINKS)
  		return -EINVAL;
  
@@ -465,7 +476,7 @@ index 2bf1f6d1..b47b5d68 100644
  {
  	struct max96712 *priv = dev_get_drvdata(dev);
  	unsigned int pipe_en_val = 0;
-@@ -503,16 +478,15 @@ int max96712_release_pipe(struct device *dev, int pipe_id)
+@@ -503,16 +489,15 @@ int max96712_release_pipe(struct device *dev, int pipe_id)
  		return -EINVAL;
  
  	mutex_lock(&priv->lock);
@@ -485,7 +496,7 @@ index 2bf1f6d1..b47b5d68 100644
  	}
  
  	mutex_unlock(&priv->lock);
-@@ -520,20 +494,21 @@ int max96712_release_pipe(struct device *dev, int pipe_id)
+@@ -520,20 +505,21 @@ int max96712_release_pipe(struct device *dev, int pipe_id)
  	return err;
  }
  
@@ -512,7 +523,7 @@ index 2bf1f6d1..b47b5d68 100644
  			      u8 data_type2, u32 vc_id)
  {
  	int err = 0;
-@@ -573,26 +548,26 @@ static int __max96712_set_pipe(struct device *dev, int pipe_id, u8 data_type1,
+@@ -573,26 +559,26 @@ static int __max96712_set_pipe(struct device *dev, int pipe_id, u8 data_type1,
  		{MAX96712_VIDEO_RX0_ADDR + (0x12 * pipe_id) + ((pipe_id >= 5) ? 6 : 0), 0x23},
  	};
  
@@ -545,7 +556,7 @@ index 2bf1f6d1..b47b5d68 100644
  	struct reg_pair map_pipe_opt[] =
  	{
  		/* ----------Initial empty video pipe configure ----------------------*/
-@@ -628,29 +603,31 @@ int max96712_init_settings(struct device *dev)
+@@ -628,29 +614,31 @@ int max96712_init_settings(struct device *dev)
  
  	mutex_lock(&priv->lock);
  
@@ -582,7 +593,7 @@ index 2bf1f6d1..b47b5d68 100644
  		     u8 data_type1, u8 data_type2, u32 vc_id)
  {
  	struct max96712 *priv = dev_get_drvdata(dev);
-@@ -667,22 +644,20 @@ int max96712_set_pipe(struct device *dev, int pipe_id,
+@@ -667,22 +655,20 @@ int max96712_set_pipe(struct device *dev, int pipe_id,
  
  	mutex_lock(&priv->lock);
  
@@ -608,7 +619,7 @@ index 2bf1f6d1..b47b5d68 100644
  
  	/* Iterating over the links and assigning unique serializer i2c addresses */
  	for (link_id_iter = 0; link_id_iter < MAX96712_MAX_LINKS ; link_id_iter++)
-@@ -690,90 +665,103 @@ int max96712_setup_link(struct device *dev, struct device *s_dev)
+@@ -690,90 +676,103 @@ int max96712_setup_link(struct device *dev, struct device *s_dev)
  		if (link_mask & (1 << link_id_iter))
  		{
  			/* Camera should be connected on this link */
