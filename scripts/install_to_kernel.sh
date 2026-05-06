@@ -22,7 +22,7 @@ FOLDER="${2:-/boot/dev}"
 echo "Extracting rootfs tarball..."
 tar -C "${JETPACK_VERSION}" -xf ${JETPACK_VERSION}/rootfs.tar.*
 
-KERNEL_VERSION=$(cat kernel_version)
+KERNEL_VERSION=$(cat "${JETPACK_VERSION}/kernel_version")
 MODULES_DIR="/lib/modules/${KERNEL_VERSION}"
 
 echo "Installing "${KERNEL_VERSION}" kernel files for JetPack ${JETPACK_VERSION}..."
@@ -36,8 +36,8 @@ kernel_image=$(ls -t ${JETPACK_VERSION}/boot/vmlinu?-${KERNEL_VERSION}|head -n1)
 sudo cp "${kernel_image}" "${FOLDER}"/
 kernel_image=$(basename "${kernel_image}")
 echo "Image file: ${kernel_image}"
-echo "Creating symbolic link to new kernel image: ${FOLDER}/Image"
-sudo ln -sfT "${FOLDER}/${kernel_image}" ${FOLDER}/Image
+echo "Creating symbolic link to new kernel image"
+sudo ln -vsfT "${FOLDER}/${kernel_image}" ${FOLDER}/Image
 
 sudo depmod
 sudo update-initramfs -ck ${KERNEL_VERSION}
