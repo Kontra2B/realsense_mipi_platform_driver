@@ -472,7 +472,7 @@ static inline u16 ds5_dev_type(struct ds5 *state, u16 dev_type)
 
 static bool ds5_is_valid_device_type(u16 dev_type)
 {
-	return !(dv_type < DS5_DEVICE_TYPE_FIRST
+	return !(dev_type < DS5_DEVICE_TYPE_FIRST
 			|| dev_type > DS5_DEVICE_TYPE_LAST);
 }
 

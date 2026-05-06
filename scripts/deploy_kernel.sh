@@ -25,17 +25,26 @@ fi
 # Set defaults
 JETPACK_VERSION="$1"
 TARGET="${2:-localhost}"
-USERNAME="${3:-administrator}"
+USERNAME="${3:-${USER}}"
 REMOTE_PATH="${4:-dev}"
 REMOTE_BOOT_FOLDER="${5:-dev}"
 IMG_DIR="images/${JETPACK_VERSION}"
+KERNEL_VERSION=$(cat ${IMG_DIR}/rootfs/kernel_version)
 DEST_DIR="kernel_mod/${JETPACK_VERSION}"
 
 [ -d ${DEST_DIR} ] && rm -rf ${DEST_DIR}
 mkdir -p ${DEST_DIR}
 
+echo "Kernel version: ${KERNEL_VERSION}"
 echo "Creating ${DEST_DIR}/rootfs tarball..."
-tar -cjf ${DEST_DIR}/rootfs.tar.bzip2 -C images/${JETPACK_VERSION}/rootfs boot lib
+tar -cjf ${DEST_DIR}/rootfs.tar.bzip2 -C ${IMG_DIR}/rootfs \
+	kernel_version \
+	boot/System.map-${KERNEL_VERSION} \
+	boot/vmlinuz-${KERNEL_VERSION} \
+	boot/vmlinux-${KERNEL_VERSION} \
+	boot/dtb \
+	lib/modules/${KERNEL_VERSION} \
+	|| true
 echo "Copy install_to_kernel.sh to kernel_mod"
 cp scripts/install_to_kernel.sh kernel_mod/
 

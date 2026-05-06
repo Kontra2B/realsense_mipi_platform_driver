@@ -15,7 +15,7 @@ endif
 NPROC ?= $(shell nproc)
 
 # LOCALVERSION : -tegra or -rt-tegra
-LOCALVERSION = $(shell grep -q "CONFIG_PREEMPT_RT=y" \
+LOCALVERSION ?= $(shell grep -q "CONFIG_PREEMPT_RT=y" \
     ${kernel_source_dir}/arch/arm64/configs/${KERNEL_DEF_CONFIG} && echo "-rt-tegra" || echo "-tegra")
 export LOCALVERSION
 

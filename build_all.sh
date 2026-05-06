@@ -37,7 +37,7 @@ if [[ -n "$2" ]]; then
     BUILD_SRCS=$(realpath $2)
 fi
 
-export LOCALVERSION=-tegra
+export LOCALVERSION=-realsense
 
 if [[ $(uname -m) == aarch64 ]]; then
     echo
@@ -129,7 +129,7 @@ fi
 
 # save kernel version to file
 cd ${DEVDIR}
-ls "${INSTALL_MOD_PATH}/lib/modules/" > kernel_version
+ls -t "${INSTALL_MOD_PATH}/lib/modules/"|head -n1 > kernel_version
 cp -f kernel_version "${INSTALL_MOD_PATH}/"
 
 # Generate .vscode/compile_commands.json from the cached module build artefact
