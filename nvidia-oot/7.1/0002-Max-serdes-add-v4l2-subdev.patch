@@ -1,14 +1,14 @@
-From e4c29048f900da814336e43c0860efc3c8a42db6 Mon Sep 17 00:00:00 2001
+From 30dda08d45b424206d9b6b17f80aa66572d76da5 Mon Sep 17 00:00:00 2001
 From: Wojciech Gladysz <kontra.wojciech.gladysz@gmail.com>
 Date: Thu, 30 Apr 2026 15:36:43 +0200
 Subject: [PATCH] tracked on [RSDSO-20669]: upstream to Nvidia kernel
 
 ---
  drivers/media/i2c/Makefile   |   3 +
- drivers/media/i2c/max9295.c  | 705 ++++++++++++++++++++++++---
+ drivers/media/i2c/max9295.c  | 703 ++++++++++++++++++++++++---
  drivers/media/i2c/max9296.c  | 218 +++++++++
- drivers/media/i2c/max96712.c | 913 ++++++++++++++++++++++++++++++++---
- 4 files changed, 1721 insertions(+), 118 deletions(-)
+ drivers/media/i2c/max96712.c | 911 ++++++++++++++++++++++++++++++++---
+ 4 files changed, 1717 insertions(+), 118 deletions(-)
 
 diff --git a/drivers/media/i2c/Makefile b/drivers/media/i2c/Makefile
 index 3b3a3c14..16130ee6 100644
@@ -25,7 +25,7 @@ index 3b3a3c14..16130ee6 100644
  obj-m += max96712.o
  
 diff --git a/drivers/media/i2c/max9295.c b/drivers/media/i2c/max9295.c
-index b363d5f6..4f753838 100644
+index b363d5f6..8b7f78ae 100644
 --- a/drivers/media/i2c/max9295.c
 +++ b/drivers/media/i2c/max9295.c
 @@ -24,6 +24,10 @@
@@ -75,7 +75,7 @@ index b363d5f6..4f753838 100644
  {
  	struct max9295 *priv = dev_get_drvdata(dev);
  	int err;
-@@ -128,6 +143,428 @@ static int max9295_write_reg(struct device *dev, u16 addr, u8 val)
+@@ -128,6 +143,426 @@ static int max9295_write_reg(struct device *dev, u16 addr, u8 val)
  	return err;
  }
  
@@ -483,12 +483,10 @@ index b363d5f6..4f753838 100644
 +	for (int i = 1; i < MAX9295_MAX_PIPES + 1; i++)
 +		pad[i].index = MEDIA_PAD_FL_SINK;
 +	pad->flags = MEDIA_PAD_FL_SOURCE;
-+
 +	media_entity_pads_init(entity, MAX9295_MAX_PIPES + 1, pad);
++	v4l2_i2c_subdev_init(&priv->sd, priv->i2c_client, &max_ops);
 +	entity->obj_type = MEDIA_ENTITY_TYPE_V4L2_SUBDEV;
 +	entity->function = MEDIA_ENT_F_VID_MUX;
-+
-+	v4l2_subdev_init(&priv->sd, &max_ops);
 +	priv->sd.owner = THIS_MODULE;
 +	ret = v4l2_async_register_subdev(&priv->sd);
 +	return ret;
@@ -504,7 +502,7 @@ index b363d5f6..4f753838 100644
  int max9295_setup_streaming(struct device *dev)
  {
  	struct max9295 *priv = dev_get_drvdata(dev);
-@@ -198,10 +635,10 @@ int max9295_setup_streaming(struct device *dev)
+@@ -198,10 +633,10 @@ int max9295_setup_streaming(struct device *dev)
  			MAX9295_CSI_PORT_B(rx1_lanes) :
  			MAX9295_CSI_PORT_A(rx1_lanes);
  
@@ -519,7 +517,7 @@ index b363d5f6..4f753838 100644
  
  	for (i = 0; i < g_ctx->num_streams; i++) {
  		struct gmsl_stream *g_stream = &g_ctx->streams[i];
-@@ -228,7 +665,7 @@ int max9295_setup_streaming(struct device *dev)
+@@ -228,7 +663,7 @@ int max9295_setup_streaming(struct device *dev)
  						MAX9295_PIPE_X_DT_ADDR) ?
  							0xC0 : 0x40;
  
@@ -528,7 +526,7 @@ index b363d5f6..4f753838 100644
  					(st_en | map_pipe_dtype[j].val));
  			}
  		}
-@@ -251,9 +688,9 @@ int max9295_setup_streaming(struct device *dev)
+@@ -251,9 +686,9 @@ int max9295_setup_streaming(struct device *dev)
  	pipe_en = (MAX9295_VID_TX_EN_X | MAX9295_VID_TX_EN_Y |
  		MAX9295_VID_TX_EN_Z | MAX9295_VID_TX_EN_U | MAX9295_VID_INIT);
  
@@ -541,7 +539,7 @@ index b363d5f6..4f753838 100644
  
  	priv->g_client.st_done = true;
  
-@@ -261,7 +698,6 @@ error:
+@@ -261,7 +696,6 @@ error:
  	mutex_unlock(&priv->lock);
  	return err;
  }
@@ -549,7 +547,7 @@ index b363d5f6..4f753838 100644
  
  int max9295_setup_control(struct device *dev)
  {
-@@ -301,62 +737,64 @@ int max9295_setup_control(struct device *dev)
+@@ -301,62 +735,64 @@ int max9295_setup_control(struct device *dev)
  
  	g_ctx = priv->g_client.g_ctx;
  
@@ -654,7 +652,7 @@ index b363d5f6..4f753838 100644
  
  	g_ctx->serdev_found = true;
  
-@@ -364,7 +802,26 @@ error:
+@@ -364,7 +800,26 @@ error:
  	mutex_unlock(&priv->lock);
  	return err;
  }
@@ -682,7 +680,7 @@ index b363d5f6..4f753838 100644
  
  int max9295_reset_control(struct device *dev)
  {
-@@ -383,10 +840,10 @@ int max9295_reset_control(struct device *dev)
+@@ -383,10 +838,10 @@ int max9295_reset_control(struct device *dev)
  	if (prim_priv__) {
  		prim_priv__->pst2_ref--;
  
@@ -695,7 +693,7 @@ index b363d5f6..4f753838 100644
  					MAX9295_CTRL0_ADDR, MAX9295_RESET_ALL);
  	}
  
-@@ -394,7 +851,6 @@ error:
+@@ -394,7 +849,6 @@ error:
  	mutex_unlock(&priv->lock);
  	return err;
  }
@@ -703,7 +701,7 @@ index b363d5f6..4f753838 100644
  
  int max9295_sdev_pair(struct device *dev, struct gmsl_link_ctx *g_ctx)
  {
-@@ -422,7 +878,6 @@ error:
+@@ -422,7 +876,6 @@ error:
  	mutex_unlock(&priv->lock);
  	return 0;
  }
@@ -711,7 +709,7 @@ index b363d5f6..4f753838 100644
  
  int max9295_sdev_unpair(struct device *dev, struct device *s_dev)
  {
-@@ -457,7 +912,6 @@ error:
+@@ -457,7 +910,6 @@ error:
  	mutex_unlock(&priv->lock);
  	return err;
  }
@@ -719,7 +717,7 @@ index b363d5f6..4f753838 100644
  
  static  struct regmap_config max9295_regmap_config = {
  	.reg_bits = 16,
-@@ -465,6 +919,135 @@ static  struct regmap_config max9295_regmap_config = {
+@@ -465,6 +917,135 @@ static  struct regmap_config max9295_regmap_config = {
  	.cache_type = REGCACHE_RBTREE,
  };
  
@@ -855,7 +853,7 @@ index b363d5f6..4f753838 100644
  #if defined(NV_I2C_DRIVER_STRUCT_PROBE_WITHOUT_I2C_DEVICE_ID_ARG) /* Linux 6.3 */
  static int max9295_probe(struct i2c_client *client)
  #else
-@@ -506,8 +1089,16 @@ static int max9295_probe(struct i2c_client *client,
+@@ -506,8 +1087,16 @@ static int max9295_probe(struct i2c_client *client,
  		prim_priv__ = priv;
  	}
  
@@ -872,7 +870,7 @@ index b363d5f6..4f753838 100644
  	/* dev communication gets validated when GMSL link setup is done */
  	dev_info(&client->dev, "%s: success\n", __func__);
  
-@@ -521,9 +1112,9 @@ static void max9295_remove(struct i2c_client *client)
+@@ -521,9 +1110,9 @@ static void max9295_remove(struct i2c_client *client)
  #endif
  {
  	struct max9295 *priv;
@@ -1148,7 +1146,7 @@ index 1ceaf3cd..08f2424a 100644
  	{ .compatible = "maxim,max9296", },
  	{ },
 diff --git a/drivers/media/i2c/max96712.c b/drivers/media/i2c/max96712.c
-index 8e237eef..0ad5f101 100644
+index 8e237eef..1545b1e9 100644
 --- a/drivers/media/i2c/max96712.c
 +++ b/drivers/media/i2c/max96712.c
 @@ -16,19 +16,81 @@
@@ -1385,7 +1383,7 @@ index 8e237eef..0ad5f101 100644
  	if (!fp) {
  		dev_err(&i2c_client->dev, "%s: debugfs create file failed\n",
  			__func__);
-@@ -222,12 +272,721 @@ static int max96712_debugfs_init(const char *dir_name,
+@@ -222,12 +272,719 @@ static int max96712_debugfs_init(const char *dir_name,
  	return 0;
  }
  
@@ -1409,12 +1407,10 @@ index 8e237eef..0ad5f101 100644
 +	for (int i = 1; i < MAX96712_MAX_LINKS + 1; i++)
 +		pad[i].index = MEDIA_PAD_FL_SOURCE;
 +	pad->flags = MEDIA_PAD_FL_SINK;
-+
 +	media_entity_pads_init(entity, MAX96712_MAX_LINKS + 1, pad);
++	v4l2_i2c_subdev_init(&priv->sd, priv->i2c_client, &max_ops);
 +	entity->obj_type = MEDIA_ENTITY_TYPE_V4L2_SUBDEV;
 +	entity->function = MEDIA_ENT_F_VID_MUX;
-+
-+	v4l2_subdev_init(&priv->sd, &max_ops);
 +	priv->sd.owner = THIS_MODULE;
 +	ret = v4l2_async_register_subdev(&priv->sd);
 +	return ret;
@@ -1844,13 +1840,13 @@ index 8e237eef..0ad5f101 100644
 +	.ir = NULL,
 +	.sensor = NULL,
 +	.pad = &max_pad_ops
- };
- 
++};
++
 +struct reg_pair {
 +	u16 addr;
 +	u8 val;
-+};
-+
+ };
+ 
 +static int max_set_registers(struct max96712 *priv, struct reg_pair *map, u32 count)
 +{
 +	int err = 0;
@@ -2109,7 +2105,7 @@ index 8e237eef..0ad5f101 100644
  #if defined(NV_I2C_DRIVER_STRUCT_PROBE_WITHOUT_I2C_DEVICE_ID_ARG) /* Linux 6.3 */
  static int max96712_probe(struct i2c_client *client)
  #else
-@@ -237,31 +996,58 @@ static int max96712_probe(struct i2c_client *client,
+@@ -237,31 +994,58 @@ static int max96712_probe(struct i2c_client *client,
  {
  	struct max96712 *priv;
  	int err = 0;
@@ -2177,7 +2173,7 @@ index 8e237eef..0ad5f101 100644
  	/*set daymode by fault*/
  	dev_info(&client->dev, "%s:  success\n", __func__);
  
-@@ -274,8 +1060,12 @@ static int max96712_remove(struct i2c_client *client)
+@@ -274,8 +1058,12 @@ static int max96712_remove(struct i2c_client *client)
  static void max96712_remove(struct i2c_client *client)
  #endif
  {
@@ -2191,7 +2187,7 @@ index 8e237eef..0ad5f101 100644
  		i2c_unregister_device(client);
  		client = NULL;
  	}
-@@ -290,7 +1080,7 @@ static const struct i2c_device_id max96712_id[] = {
+@@ -290,10 +1078,11 @@ static const struct i2c_device_id max96712_id[] = {
  };
  
  static const struct of_device_id max96712_of_match[] = {
@@ -2200,14 +2196,10 @@ index 8e237eef..0ad5f101 100644
  	{ },
  };
  
-@@ -300,6 +1090,7 @@ static struct i2c_driver max96712_i2c_driver = {
- 	.driver = {
- 		.name = "max96712",
- 		.owner = THIS_MODULE,
-+		.of_match_table = of_match_ptr(max96712_of_match),
- 	},
- 	.probe = max96712_probe,
- 	.remove = max96712_remove,
++MODULE_DEVICE_TABLE(of, max96712_of_match);
+ MODULE_DEVICE_TABLE(i2c, max96712_id);
+ 
+ static struct i2c_driver max96712_i2c_driver = {
 -- 
 2.51.0
 

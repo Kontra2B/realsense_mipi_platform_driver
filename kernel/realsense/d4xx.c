@@ -4494,7 +4494,7 @@ static int ds5_probe(struct i2c_client *c
 
 	if (!state) return -ENOMEM;
 
-	dev_warn(&c->dev, "[robing driver for D4xx\n");
+	dev_warn(&c->dev, "probing driver for D4xx\n");
 
 	mutex_init(&state->lock);
 	state->client = c;
