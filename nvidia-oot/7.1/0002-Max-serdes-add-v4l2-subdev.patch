@@ -4,26 +4,11 @@ Date: Thu, 30 Apr 2026 15:36:43 +0200
 Subject: [PATCH] tracked on [RSDSO-20669]: upstream to Nvidia kernel
 
 ---
- drivers/media/i2c/Makefile   |   3 +
  drivers/media/i2c/max9295.c  | 703 ++++++++++++++++++++++++---
  drivers/media/i2c/max9296.c  | 218 +++++++++
  drivers/media/i2c/max96712.c | 911 ++++++++++++++++++++++++++++++++---
  4 files changed, 1717 insertions(+), 118 deletions(-)
 
-diff --git a/drivers/media/i2c/Makefile b/drivers/media/i2c/Makefile
-index 3b3a3c14..16130ee6 100644
---- a/drivers/media/i2c/Makefile
-+++ b/drivers/media/i2c/Makefile
-@@ -17,6 +17,9 @@ subdir-ccflags-y += -Werror
- ifneq ($(NV_BUILD_SYSTEM_TYPE),embedded-linux)
- obj-m += max9295.o
- obj-m += max9296.o
-+subdir-ccflags-y += -DCONFIG_VIDEO_D4XX_SERDES
-+subdir-ccflags-y += -DCONFIG_TEGRA_CAMERA_PLATFORM
-+obj-m += d4xx.o
- ifndef CONFIG_TEGRA_SYSTEM_TYPE_ACK
- obj-m += max96712.o
- 
 diff --git a/drivers/media/i2c/max9295.c b/drivers/media/i2c/max9295.c
 index b363d5f6..8b7f78ae 100644
 --- a/drivers/media/i2c/max9295.c

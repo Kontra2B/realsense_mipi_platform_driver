@@ -162,8 +162,7 @@ nvidia-display-install:
 	@echo   "================================================================================"
 	@echo   "make $(MAKECMDGOALS) - nvidia-display ..."
 	@echo   "================================================================================"
-	$(MAKE) -C $(NVIDIA_HEADERS) \
-		-j $(NPROC) \
+	$(MAKE) -C $(NVIDIA_HEADERS) -j $(NPROC) \
 		M=$(MAKEFILE_DIR)/nvdisplay/kernel-open modules_install
 
 nvidia-display-clean:

@@ -42,6 +42,7 @@ if ! version_lt "$JP_INPUT_VERSION" 7.0; then
 	KERNEL_DIR="kernel/kernel-noble-src"
 	JETPACK_VERSION="7.x"
 	L4T_VERSION=jetson_"${REVISION}"
+	export LOCALVERSION=-realsense
 elif ! version_lt "$JP_INPUT_VERSION" 6.0; then
 	case "${JP_INPUT_VERSION}" in
 		6.2.2) REVISION=36.5;;
@@ -53,6 +54,7 @@ elif ! version_lt "$JP_INPUT_VERSION" 6.0; then
 	KERNEL_DIR="kernel/kernel-jammy-src"
 	JETPACK_VERSION="6.x"
 	L4T_VERSION=jetson_"${REVISION}"
+	export LOCALVERSION=-realsense
 elif ! version_lt "${JP_INPUT_VERSION}" 5.0; then
 	case "${JP_INPUT_VERSION}" in
 		5.1.6) REVISION=35.6.4;;

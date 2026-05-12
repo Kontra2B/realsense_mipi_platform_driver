@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 KERNEL_SRC_DIR ?= kernel-noble-src
-KERNEL_DEF_CONFIG ?= defconfig
+KERNEL_DEF_CONFIG ?= custom_defconfig
 
 MAKEFILE_DIR := $(abspath $(shell dirname $(lastword $(MAKEFILE_LIST))))
 kernel_source_dir := $(MAKEFILE_DIR)/$(KERNEL_SRC_DIR)
@@ -40,11 +40,8 @@ install:
 	@echo   "================================================================================"
 	@echo   "Installing $(KERNEL_SRC_DIR) sources"
 	@echo   "================================================================================"
-	$(MAKE) -C $(kernel_source_dir) $(O_OPT) \
-		install
-	$(MAKE) \
-		-C $(kernel_source_dir) $(O_OPT) \
-		modules_install
+	$(MAKE) -C $(kernel_source_dir) $(O_OPT) install
+	$(MAKE) -C $(kernel_source_dir) $(O_OPT) modules_install
 	@echo   "================================================================================"
 	@echo   "Kernel and in-tree modules installed successfully."
 	@echo   "================================================================================"

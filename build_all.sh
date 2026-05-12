@@ -37,8 +37,6 @@ if [[ -n "$2" ]]; then
     BUILD_SRCS=$(realpath $2)
 fi
 
-export LOCALVERSION=-realsense
-
 if [[ $(uname -m) == aarch64 ]]; then
     echo
     echo Native build

@@ -389,6 +389,7 @@ struct ds5_format {
 
 struct ds5_sensor {
 	int id;
+	struct device dev;
 	struct v4l2_subdev sd;
 	struct media_pad pad;
 	struct ds5_ctrls ctrls;
@@ -1576,10 +1577,8 @@ static int ds5_configure(struct ds5 *state)
 {
 	struct ds5_sensor *sensor;
 	u16 md_fmt;
-#ifdef CONFIG_VIDEO_D4XX_SERDES
 	u16 data_type1, data_type2;
 	bool is_calib = 0;
-#endif
 	u16 dt_addr, md_addr, override_addr, fps_addr, width_addr, height_addr;
 	u16 dt_value = 0;
 	u16 md_value = 0;
@@ -1757,7 +1756,6 @@ static int ds5_sensor_s_stream(struct v4l2_subdev* sd, int on) {
 	unsigned long timeout, ts;
 	int restore_val = 0;
 	u16 stream_cmd;
-	u16 stream_id, vc_id;
 	struct ds5_sensor *sensor = container_of(sd, struct ds5_sensor, sd);
 	u16 expected_streaming_state;
 	bool ds5_config_done = !on; /* for stop, skip config */
@@ -1778,8 +1776,8 @@ static int ds5_sensor_s_stream(struct v4l2_subdev* sd, int on) {
 	// spare duplicate calls
 	if (sensor->streaming == on)
 		return 0;
-	dev_dbg(&state->client->dev, "s_stream for stream %s, vc:%d, SENSOR=%s on = %d\n",
-			sensor->sd.name, vc_id, ds5_sensor_name[sensor->id], on);
+	dev_dbg(&state->client->dev, "s_stream for stream %s, SENSOR=%s on = %d\n",
+			sensor->sd.name, ds5_sensor_name[sensor->id], on);
 
 	if (on) {
 		stream_cmd = (DS5_STREAM_START | sensor->id);
@@ -1804,8 +1802,8 @@ static int ds5_sensor_s_stream(struct v4l2_subdev* sd, int on) {
 	if (on == !(status & DS5_STATUS_STREAMING))
 	{
 		dev_dbg(&state->client->dev,
-			"stream %d in expected state, toggling to %d (status: 0x%04x) %dms\n",
-			stream_id, on, status, jiffies_to_msecs(jiffies - ts));
+			"stream in expected state, toggling to %d (status: 0x%04x) %dms\n",
+			on, status, jiffies_to_msecs(jiffies - ts));
 	} else {
 		/* If state was invalidated by reset-generation bump and FW still
 		 * reports this stream as active, force a stop to guarantee next
@@ -2448,8 +2446,9 @@ static int ds5_s_ctrl(struct v4l2_ctrl *ctrl)
 	int ret = -EINVAL;
 	u16 base = sensor->control_base;
 
-	dev_dbg(&state->client->dev, "%s: %s - ctrl: %s, value: %d\n",
-		__func__, ds5_sensor_name[sensor->id], ctrl->name, ctrl->val);
+	pr_info("WOJTEK] %s: %s\n", __func__, ctrl->name);
+	dev_dbg(&state->client->dev, "%s - ctrl: %s, value: %d\n",
+		ds5_sensor_name[sensor->id], ctrl->name, ctrl->val);
 
 	mutex_lock(&state->lock);
 
@@ -3273,143 +3272,6 @@ static const struct v4l2_subdev_internal_ops ds5_internal_ops = {
 	.close = ds5_close,
 };
 
-#ifdef CONFIG_VIDEO_D4XX_SERDES
-
-/*
- * FIXME
- * temporary solution before changing GMSL data structure or merging all 4 D457
- * sensors into one i2c device. Only first sensor node per max9295 sets up the
- * link.
- */
-#ifdef CONFIG_OF
-#else /* CONFIG_OF */
-// ds5mux i2c ser des
-// mux a - 2 0x42 0x48
-// mux b - 2 0x44 0x4a
-// mux c - 4 0x42 0x48
-// mux d - 4 0x44 0x4a
-// axiomtek
-// mux a - 2 0x42 0x48
-// mux b - 2 0x44 0x4a
-// mux c - 4 0x62 0x68
-// mux d - 4 0x64 0x6a
-
-static int ds5_board_setup(struct ds5 *state)
-{
-	struct device *dev = &state->client->dev;
-	struct d4xx_pdata *pdata = dev->platform_data;
-	struct i2c_adapter *adapter = state->client->adapter;
-	int bus = adapter->nr;
-	int err = 0;
-	int i;
-	char suffix = pdata->suffix;
-	static struct max9295_pdata max9295_pdata = {
-		.is_prim_ser = 1, // todo: configurable
-		.def_addr = 0x40, // todo: configurable
-	};
-
-	static struct max9296_pdata max9296_pdata = {
-		.max_src = 2,
-		.csi_mode = GMSL_CSI_2X4_MODE,
-	};
-	static struct i2c_board_info i2c_info_des = {
-		I2C_BOARD_INFO("max9296", 0x48),
-		.platform_data = &max9296_pdata,
-	};
-	static struct i2c_board_info i2c_info_ser = {
-		I2C_BOARD_INFO("max9295", 0x42),
-		.platform_data = &max9295_pdata,
-	};
-
-	i2c_info_ser.addr = pdata->subdev_info[0].ser_alias; //0x42, 0x44, 0x62, 0x64
-
-	i2c_info_des.addr = pdata->subdev_info[0].board_info.addr; //0x48, 0x4a, 0x68, 0x6a
-
-	/* look for already registered max9296, use same context if found */
-	ds5_init_global_slots_once();
-	if (state->aggregated)
-		suffix += 4;
-	dev_info(dev, "Init SerDes %c on %d@0x%x<->%d@0x%x\n",
-		suffix,
-		bus, pdata->subdev_info[0].board_info.addr, //48
-		bus, pdata->subdev_info[0].ser_alias); //42
-
-	if (!state->dser_i2c)
-		state->dser_i2c = i2c_new_client_device(adapter, &i2c_info_des);
-
-	if (state->ser_i2c == NULL) {
-		err = -EPROBE_DEFER;
-		dev_err(dev, "missing serializer client\n");
-		goto error;
-	}
-	if (state->ser_i2c->dev.driver == NULL) {
-		err = -EPROBE_DEFER;
-		dev_err(dev, "missing serializer driver\n");
-		goto error;
-	}
-	if (state->dser_i2c == NULL) {
-		err = -EPROBE_DEFER;
-		dev_err(dev, "missing deserializer client\n");
-		goto error;
-	}
-	if (state->dser_i2c->dev.driver == NULL) {
-		err = -EPROBE_DEFER;
-		dev_err(dev, "missing deserializer driver\n");
-		goto error;
-	}
-
-	// reg
-
-	state->g_ctx.sdev_reg = state->client->addr;
-	state->g_ctx.sdev_def = 0x10;// def-addr TODO: configurable
-	// Address reassignment for d4xx-a 0x10->0x12
-	dev_info(dev, "Address reassignment for %s-%c 0x%x->0x%x\n",
-		pdata->subdev_info[0].board_info.type, suffix,
-		state->g_ctx.sdev_def, state->g_ctx.sdev_reg);
-	//0x42, 0x44, 0x62, 0x64
-	state->g_ctx.ser_reg = pdata->subdev_info[0].ser_alias;
-	dev_info(dev,  "serializer: i2c-%d@0x%x\n",
-		state->ser_i2c->adapter->nr, state->g_ctx.ser_reg);
-
-	if (err < 0) {
-		dev_err(dev, "serializer reg not found\n");
-		goto error;
-	}
-
-	state->ser_dev = &state->ser_i2c->dev;
-
-	dev_info(dev,  "deserializer: i2c-%d@0x%x\n",
-		state->dser_i2c->adapter->nr, state->dser_i2c->addr);
-
-
-	state->dser_dev = &state->dser_i2c->dev;
-	/* Initialize deserializer interface */
-	state->dser_ops = &max9296_interface;
-	
-
-	/* populate g_ctx from pdata */
-	state->g_ctx.dst_csi_port = GMSL_CSI_PORT_A;
-	state->g_ctx.src_csi_port = GMSL_CSI_PORT_B;
-	state->g_ctx.csi_mode = GMSL_CSI_1X4_MODE;
-	if (state->aggregated) { // aggregation
-		dev_info(dev,  "configure GMSL port B\n");
-		state->g_ctx.serdes_csi_link = GMSL_SERDES_CSI_LINK_B;
-	} else {
-		dev_info(dev,  "configure GMSL port A\n");
-		state->g_ctx.serdes_csi_link = GMSL_SERDES_CSI_LINK_A;
-	}
-	state->g_ctx.st_vc = 0;
-	state->g_ctx.dst_vc = 0;
-
-	state->g_ctx.num_csi_lanes = 2;
-	state->g_ctx.s_dev = dev;
-
-error:
-	return err;
-}
-#endif /* CONFIG_OF */
-#endif
-
 static int ds5_ctrl_init(struct ds5_sensor *sensor)
 {
 
@@ -4082,82 +3944,86 @@ static void ds5_adjust_sync_mode_control(struct i2c_client *client, struct ds5 *
 	}
 }
 
-int ds5_chrdev_init(struct i2c_client *client, struct ds5 *state);
+int ds5_chrdev_init(struct i2c_client *, struct ds5 *);
 
-static int ds5_sensor_init(int id, struct fwnode_handle *fwnode, struct ds5 *state)
+static void ds5_sensor_dev_release(struct device *dev) {
+	dev_info(dev, "%s: called\n", __func__);
+}
+
+static int ds5_sensor_init(int id, struct device_node *node, struct ds5 *priv)
 {
-	struct i2c_client *client = state->client;
-	struct ds5_sensor *sensor = &state->sensor[id];
+	struct i2c_client *client = priv->client;
+	struct ds5_sensor *sensor = &priv->sensor[id];
+	struct device *dev = &sensor->dev;
 	struct v4l2_subdev *sd = &sensor->sd;
 	struct media_entity *entity = &sensor->sd.entity;
 	struct media_pad *pad = &sensor->pad;
-	dev_t *dev_num = &state->client->dev.devt;
+	struct fwnode_handle *fwnode = of_fwnode_handle(node);
+	char *name = ds5_sensor_name[id];
+	dev_t *dev_num = &client->dev.devt;
 	int ret;
 #ifndef CONFIG_OF
-	struct d4xx_pdata *dpdata = state->client->dev.platform_data;
+	struct d4xx_pdata *dpdata = priv->client->dev.platform_data;
 	char suffix = dpdata->suffix;
 #endif
 	// See tegracam_v4l2.c tegracam_v4l2subdev_register()
 	// Set owner to NULL so we can unload the driver module
 	sensor->control_base = DS5_DEPTH_CONTROL_BASE;
 	sensor->status_reg = DS5_DEPTH_CONTROL_STATUS;
-	sensor->metadata = true;
 	if (id == DS5_PAD_RGB) {
 		sensor->control_base = DS5_RGB_CONTROL_BASE;
 		sensor->status_reg = DS5_RGB_CONTROL_STATUS;
 	}
-	if (id == DS5_PAD_IMU) sensor->metadata = false;
-	dev_info(&state->client->dev, "%s: sensor %s, %s\n",
-			__func__, ds5_sensor_name[id],
-			sensor->metadata? "metadata enabled": "no metadata");
-
+	sensor->metadata = id == DS5_PAD_IMU? false: true;
 	ds5_ctrl_init(sensor);
-	sd->flags |= V4L2_SUBDEV_FL_HAS_DEVNODE;
+	// device_initialize(dev);
+	v4l2_subdev_init(sd, &ds5_camera_ops);
 	pad->flags = MEDIA_PAD_FL_SOURCE;
-
-	media_entity_pads_init(entity, DS5_PAD_COUNT, pad);
-	v4l2_i2c_subdev_init(sd, state->client, &ds5_camera_ops);
+	media_entity_pads_init(entity, 1, pad);
+	sd->flags |= V4L2_SUBDEV_FL_HAS_DEVNODE;
 	sd->owner = THIS_MODULE;
-	sd->fwnode = fwnode;
 	sd->internal_ops = &ds5_internal_ops;
 	sd->grp_id = *dev_num;
+	sd->dev = dev;
+	dev->parent = &client->dev;
+	dev->fwnode = fwnode;
+	dev->release = ds5_sensor_dev_release;
+	dev_set_name(dev, "d4xx %s-%x", name, id);
+	sd->fwnode = fwnode;
 	entity->obj_type = MEDIA_ENTITY_TYPE_V4L2_SUBDEV;
 	entity->function = MEDIA_ENT_F_CAM_SENSOR;
 #ifndef CONFIG_OF
 	/*
 	 * TODO: suffix for 2 D457 connected to 1 Deser
 	 */
-	if (state->aggregated & 1)
+	if (priv->aggregated & 1)
 		suffix += 4;
 	snprintf(sd->name, sizeof(sd->name), "d4xx-%s-%c", name, suffix);
 #else
-	snprintf(sd->name, sizeof(sd->name), "d4xx-%s-%d-%04x",
-			ds5_sensor_name[id], i2c_adapter_id(client->adapter), client->addr);
+	snprintf(sd->name, sizeof(sd->name), "d4xx %s %d-%04x",
+			name, i2c_adapter_id(client->adapter), client->addr);
 #endif
-	sd->flags |= V4L2_SUBDEV_FL_HAS_DEVNODE;
-	for (int id = DS5_PAD_DEPTH; id < DS5_PAD_COUNT; id++)
-		pad[id].flags = MEDIA_PAD_FL_SINK;
-	pad[id].flags = MEDIA_PAD_FL_SOURCE;
-	entity->obj_type = MEDIA_ENTITY_TYPE_V4L2_SUBDEV;
-	entity->function = MEDIA_ENT_F_CAM_SENSOR;
-
-	v4l2_i2c_subdev_init(sd, state->client, &ds5_camera_ops);
+	/* ret = device_add(dev);
+	if (ret) {
+		dev_err(dev, "%s: failed to add sensor device: %s\n",
+				__func__, name);
+		return ret;
+	} */
 	ret = v4l2_async_register_subdev(sd);
 	if (ret) {
 		dev_err(sd->dev, "%s: failed to register sensor subdevice: %s\n",
-				__func__, ds5_sensor_name[id]);
+				__func__, name);
 		return ret;
 	}
-
 	if (id == DS5_PAD_DEPTH) {
-		ret = ds5_chrdev_init(client, state);
-		if (ret) return ret;
+		if (ds5_chrdev_init(client, priv))
+			dev_err(sd->dev, "%s: failed to register DFU device\n", __func__);
 	}
 
-	dev_info(sd->dev, "%s/%d: register sensor subdevice: %s\n",
-				__func__, id, ds5_sensor_name[id]);
+	dev_info(sd->dev, "%s/%d: registered sensor subdevice %s: %s\n",
+				__func__, id, name, sd->name);
 
-	return media_entity_pads_init(entity, 1, pad);
+	return ret;
 }
 
 static int ds5_hw_init(struct i2c_client *c, struct ds5 *state)
@@ -4191,31 +4057,39 @@ static int ds5_hw_init(struct i2c_client *c, struct ds5 *state)
 		ret = ds5_read(state, DS5_MIPI_CONF_STATUS, &mipi_status);
 
 #ifdef CONFIG_TEGRA_CAMERA_PLATFORM
-	dev_dbg(&c->dev, "%s: phandle %x node %s status %x\n", __func__,
-		 c->dev.of_node->phandle, c->dev.of_node->full_name, mipi_status);
+	dev_dbg(&c->dev, "%s: phandle %x node %pOF status %x\n", __func__,
+		 c->dev.of_node->phandle, c->dev.of_node, mipi_status);
 #endif
 
 	return ret;
 }
 
-static int ds5_v4l_init(struct i2c_client *client, struct ds5 *state)
+static int ds5_v4l_init(struct ds5 *priv)
 {
-	struct fwnode_handle *node = state->client->dev.fwnode;
-	struct fwnode_handle *child = NULL;
+	struct i2c_client *client = priv->client;
+	struct device_node *child, *node = client->dev.of_node;
+	u32 id = 0;
 	int ret;
 
-	ret = ds5_parse_cam(client, state);
-	for (int id = DS5_PAD_DEPTH; id < DS5_PAD_COUNT; id++) {
-		fwnode_get_next_child_node(node, child);
-		if (!child) break;
-		ret = ds5_sensor_init(id, child, state);
+	dev_info(&client->dev, "%s: %s\n", __func__, node->name);
+	for_each_child_of_node(node, child) {
+		if (of_property_read_u32(child, "reg", &id)) {
+			dev_info(&client->dev, "%s: no sensor id\n", __func__);
+		}
+		dev_info(&client->dev, "%s: child node %s/%d\n", __func__,
+				child->name, id);
+		if (id < DS5_PAD_COUNT)
+			ret = ds5_sensor_init(id, child, priv);
+		id++;
 	}
 
 	/* Adjust sync_mode control range based on device type - must be done
 	 * after ds5_mux_init() creates the control */
-	ds5_adjust_sync_mode_control(client, state);
+	ds5_adjust_sync_mode_control(client, priv);
 
-	ret = ds5_hw_init(client, state);
+	ret = ds5_parse_cam(client, priv);
+	ret = ds5_hw_init(client, priv);
+	dev_info(&client->dev, "%s: successful\n", __func__);
 	return ret;
 }
 
@@ -4488,28 +4362,28 @@ static int ds5_probe(struct i2c_client *c
 #endif
 		)
 {
-	struct ds5 *state = devm_kzalloc(&c->dev, sizeof(*state), GFP_KERNEL);
+	struct ds5 *priv = devm_kzalloc(&c->dev, sizeof(struct ds5), GFP_KERNEL);
 	int ret, err = 0;
 	u16 magic = 0;
 
-	if (!state) return -ENOMEM;
+	if (!priv) return -ENOMEM;
 
 	dev_warn(&c->dev, "probing driver for D4xx\n");
 
-	mutex_init(&state->lock);
-	state->client = c;
-	state->device_type = DS5_DEVICE_TYPE_UNKNOWN;
-	state->variant = ds5_variants;
+	mutex_init(&priv->lock);
+	priv->client = c;
+	priv->device_type = DS5_DEVICE_TYPE_UNKNOWN;
+	priv->variant = ds5_variants;
 #ifdef CONFIG_OF
-	state->vcc = devm_regulator_get(&c->dev, "vcc");
-	if (IS_ERR(state->vcc)) {
-		ret = PTR_ERR(state->vcc);
+	priv->vcc = devm_regulator_get(&c->dev, "vcc");
+	if (IS_ERR(priv->vcc)) {
+		ret = PTR_ERR(priv->vcc);
 		dev_warn(&c->dev, "%s: failed %d to get vcc regulator\n",
 				__func__, ret);
 		return ret;
 	}
-	if (state->vcc) {
-		ret = regulator_enable(state->vcc);
+	if (priv->vcc) {
+		ret = regulator_enable(priv->vcc);
 		if (ret < 0) {
 			dev_warn(&c->dev, "%s: failed %d to enable the vcc regulator\n",
 					__func__, ret);
@@ -4517,15 +4391,15 @@ static int ds5_probe(struct i2c_client *c
 		}
 	}
 #endif
-	state->regmap = devm_regmap_init_i2c(c, &ds5_regmap_config);
-	if (IS_ERR(state->regmap)) {
-		ret = PTR_ERR(state->regmap);
+	priv->regmap = devm_regmap_init_i2c(c, &ds5_regmap_config);
+	if (IS_ERR(priv->regmap)) {
+		ret = PTR_ERR(priv->regmap);
 		dev_err(&c->dev, "%s: regmap init failed: %d\n", __func__, ret);
 		goto e_regulator;
 	}
 
 	// Verify communication
-	ret = ds5_read(state, DS5_FW_VERSION, &state->fw_version);
+	ret = ds5_read(priv, DS5_FW_VERSION, &priv->fw_version);
 	if (ret < 0) {
 		dev_err(&c->dev,
 			"%s: cannot communicate with D4XX: %d on addr: 0x%x\n",
@@ -4534,59 +4408,73 @@ static int ds5_probe(struct i2c_client *c
 	}
 
 #ifndef CONFIG_OF
-	state->is_depth = 1;
-	state->control_base = DS5_DEPTH_CONTROL_BASE;
-	state->control_status_reg = DS5_DEPTH_CONTROL_STATUS;
+	priv->control_base = DS5_DEPTH_CONTROL_BASE;
+	priv->control_status_reg = DS5_DEPTH_CONTROL_STATUS;
 #endif
 
 	/* Verify post-reset format-discovery readiness.
 	 * FW_VERSION becomes readable earlier than DS5_DEVICE_TYPE, while later
 	 * probe code depends on DEVICE_TYPE to pick the correct format tables.
 	 */
-	ret = ds5_wait_device_type(state, NULL);
+	ret = ds5_wait_device_type(priv, NULL);
 	if (ret) {
 		dev_err(&c->dev,
 			"%s: can not read device type\n", __func__);
 		goto e_chardev;
 	}
 
-	ret = ds5_read(state, DS5_DFU_MAGIC_REG, &magic);
+	ret = ds5_read(priv, DS5_DFU_MAGIC_REG, &magic);
 	if (ret) magic = 0;
 
 	if (magic == DS5_DFU_MAGIC_LSW) {
 		dev_info(&c->dev, "%s: D4XX recovery state\n", __func__);
-		state->dfu_dev.dfu_state_flag = DS5_DFU_RECOVERY;
+		priv->dfu_dev.dfu_state_flag = DS5_DFU_RECOVERY;
 		/* Override I2C drvdata with state for use in remove function */
 		return 0;
 	}
 
-	ds5_read_with_check(state, DS5_FW_VERSION, &state->fw_version);
-	ds5_read_with_check(state, DS5_FW_BUILD, &state->fw_build);
+	ds5_read_with_check(priv, DS5_FW_VERSION, &priv->fw_version);
+	ds5_read_with_check(priv, DS5_FW_BUILD, &priv->fw_build);
 
 	dev_info(&c->dev, "%s: camera firmware build: %d.%d.%d.%d\n", __func__,
-			(state->fw_version >> 8) & 0xff, state->fw_version & 0xff,
-			(state->fw_build >> 8) & 0xff, state->fw_build & 0xff);
+			(priv->fw_version >> 8) & 0xff, priv->fw_version & 0xff,
+			(priv->fw_build >> 8) & 0xff, priv->fw_build & 0xff);
 
-	ret = ds5_v4l_init(c, state);
-	if (ret < 0) goto e_chardev;
+	/*
+	media_device_init(&priv->mdev);
+	snprintf(priv->mdev.model, sizeof(priv->mdev.model), "Realsense camera chain");
+	priv->mdev.dev = &c->dev;
+	ret = media_device_register(&priv->mdev);
+	if (ret) {
+		dev_err(&c->dev, "%s: can not retister media device\n", __func__);
+		goto e_chardev;
+	}
+	*/
+
+	ret = ds5_v4l_init(priv);
+	if (ret) {
+		dev_err(&c->dev, "%s: failed to initialize sensors\n", __func__);
+		goto e_chardev;
+	}
 
 	dev_info(&c->dev, "%s: driver version: %s\n", __func__,
 		THIS_MODULE->version ? THIS_MODULE->version : "N/A");
 
-	i2c_set_clientdata(c, state);
+	i2c_set_clientdata(c, priv);
 #ifdef CONFIG_SYSFS
 	/* Custom sysfs attributes */
 	/* create the sysfs file group */
-	err = sysfs_create_group(&state->client->dev.kobj, &ds5_attr_group);
+	err = sysfs_create_group(&priv->client->dev.kobj, &ds5_attr_group);
 #endif
+	dev_info(&c->dev, "%s: successful\n", __func__);
 	return 0;
 
 e_chardev:
-	if (state->dfu_dev.ds5_class)
-		ds5_chrdev_remove(state);
+	if (priv->dfu_dev.ds5_class)
+		ds5_chrdev_remove(priv);
 e_regulator:
-	if (state->vcc)
-		regulator_disable(state->vcc);
+	if (priv->vcc)
+		regulator_disable(priv->vcc);
 	return ret;
 }
 
@@ -4596,15 +4484,12 @@ static int ds5_remove(struct i2c_client *c)
 static void ds5_remove(struct i2c_client *c)
 #endif
 {
-	struct ds5 *state = i2c_get_clientdata(c);
-#ifndef CONFIG_TEGRA_CAMERA_PLATFORM
-	state->is_depth = 1;
-#endif
-	ds5_chrdev_remove(state);
-	if (state->vcc)
-		regulator_disable(state->vcc);
+	struct ds5 *priv = i2c_get_clientdata(c);
+	ds5_chrdev_remove(priv);
+	if (priv->vcc)
+		regulator_disable(priv->vcc);
 
-	if (state->dfu_dev.dfu_state_flag != DS5_DFU_RECOVERY) {
+	if (priv->dfu_dev.dfu_state_flag != DS5_DFU_RECOVERY) {
 #ifdef CONFIG_SYSFS
 		sysfs_remove_group(&c->dev.kobj, &ds5_attr_group);
 #endif
@@ -4651,6 +4536,7 @@ MODULE_AUTHOR("Guennadi Liakhovetski <guennadi.liakhovetski@intel.com>,\n\
 				Qingwu Zhang <qingwu.zhang@intel.com>,\n\
 				Evgeni Raikhel <evgeni.raikhel@intel.com>,\n\
 				Shikun Ding <shikun.ding@intel.com>,\n\
-				Dmitry Perchanov <dmitry.perchanov@intel.com>");
+				Dmitry Perchanov <dmitry.perchanov@intel.com>,\n\
+				Wojciech Gładysz <kontra.wojciech.gladysz@gmail.com>");
 MODULE_LICENSE("GPL v2");
-MODULE_VERSION("1.0.2.29");
+MODULE_VERSION("2.0.0.00");
