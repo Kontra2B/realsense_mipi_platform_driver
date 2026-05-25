@@ -103,7 +103,7 @@ else
         cp -u defconfig ./arch/arm64/configs/custom_defconfig
         # Remove unwanted
         rm defconfig .config
-        make mrproper
+        # make mrproper
         cd $BUILD_SRCS
         # Building the Image with custom_defconfig
         make KERNEL_DEF_CONFIG=custom_defconfig -C kernel

@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 KERNEL_SRC_DIR ?= kernel-noble-src
-KERNEL_DEF_CONFIG ?= custom_defconfig
+KERNEL_DEF_CONFIG ?= defconfig
 
 MAKEFILE_DIR := $(abspath $(shell dirname $(lastword $(MAKEFILE_LIST))))
 kernel_source_dir := $(MAKEFILE_DIR)/$(KERNEL_SRC_DIR)
