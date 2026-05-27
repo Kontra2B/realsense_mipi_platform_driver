@@ -4,53 +4,17 @@ Date: Tue, 19 May 2026 11:11:45 +0000
 Subject: [PATCH 2/2] tracked on RSDSO-20669: RS_DS5 upstream to Nvidia kernel
 
 ---
- drivers/base/core.c                       |  9 +++++++--
+ drivers/base/core.c                       |  4 ++--
  drivers/media/v4l2-core/v4l2-async.c      | 16 +++++++++++-----
  drivers/media/v4l2-core/v4l2-ctrls-core.c |  1 +
- drivers/media/v4l2-core/v4l2-device.c     |  1 +
  drivers/media/v4l2-core/v4l2-fwnode.c     |  2 +-
  drivers/media/v4l2-core/v4l2-subdev.c     |  2 +-
- drivers/of/property.c                     |  1 +
  7 files changed, 23 insertions(+), 9 deletions(-)
 
 diff --git a/drivers/base/core.c b/drivers/base/core.c
 index 0083bc089f3a..157d961679c1 100644
 --- a/drivers/base/core.c
 +++ b/drivers/base/core.c
-@@ -766,6 +766,7 @@ struct device_link *device_link_add(struct device *consumer,
- 	if (!device_pm_initialized(supplier)
- 	    || (!(flags & DL_FLAG_SYNC_STATE_ONLY) &&
- 		  device_is_dependent(consumer, supplier))) {
-+		// pr_info("[WOJTEK] %s/1: %x\n", __func__, flags);
- 		link = NULL;
- 		goto out;
- 	}
-@@ -777,6 +778,7 @@ struct device_link *device_link_add(struct device *consumer,
- 	if (flags & DL_FLAG_SYNC_STATE_ONLY &&
- 	    consumer->links.status != DL_DEV_NO_DRIVER &&
- 	    consumer->links.status != DL_DEV_PROBING) {
-+		// pr_info("[WOJTEK] %s/2: %pOF/%x/%x\n", __func__, consumer->of_node, flags, consumer->links.status);
- 		link = NULL;
- 		goto out;
- 	}
-@@ -789,7 +791,9 @@ struct device_link *device_link_add(struct device *consumer,
- 	if (flags & DL_FLAG_AUTOREMOVE_SUPPLIER)
- 		flags &= ~DL_FLAG_AUTOREMOVE_CONSUMER;
- 
-+	// pr_info("[WOJTEK] %s/3: %pOF\n", __func__, consumer->of_node);
- 	list_for_each_entry(link, &supplier->links.consumers, s_node) {
-+		// pr_info("[WOJTEK] %s/4: %pOF\n", __func__, link->consumer->of_node);
- 		if (link->consumer != consumer)
- 			continue;
- 
-@@ -922,6 +926,7 @@ struct device_link *device_link_add(struct device *consumer,
- 	if ((flags & DL_FLAG_PM_RUNTIME && flags & DL_FLAG_RPM_ACTIVE) && !link)
- 		pm_runtime_put(supplier);
- 
-+	// pr_info("[WOJTEK] %s/5: %p\n", __func__, link);
- 	return link;
- }
- EXPORT_SYMBOL_GPL(device_link_add);
 @@ -2115,14 +2120,14 @@ static int fw_devlink_create_devlink(struct device *con,
  		if (sup_dev->links.status == DL_DEV_NO_DRIVER &&
  		    sup_handle->flags & FWNODE_FLAG_INITIALIZED) {
@@ -127,30 +91,6 @@ index 9635bf57c51e..ab92f79da113 100644
  			if (ret)
  				goto err_unbind;
  		}
-diff --git a/drivers/media/v4l2-core/v4l2-ctrls-core.c b/drivers/media/v4l2-core/v4l2-ctrls-core.c
-index a662fb60f73f..57e033a146a3 100644
---- a/drivers/media/v4l2-core/v4l2-ctrls-core.c
-+++ b/drivers/media/v4l2-core/v4l2-ctrls-core.c
-@@ -2479,6 +2479,7 @@ int __v4l2_ctrl_handler_setup(struct v4l2_ctrl_handler *hdl)
- 			}
- 		}
- 		ret = call_op(master, s_ctrl);
-+		// pr_info("[WOJTEK] %s/%d: %s\n", __func__, ret, master->name);
- 		if (ret)
- 			break;
- 	}
-diff --git a/drivers/media/v4l2-core/v4l2-device.c b/drivers/media/v4l2-core/v4l2-device.c
-index d2e58ae91f9b..853e7679b043 100644
---- a/drivers/media/v4l2-core/v4l2-device.c
-+++ b/drivers/media/v4l2-core/v4l2-device.c
-@@ -114,6 +114,7 @@ int v4l2_device_register_subdev(struct v4l2_device *v4l2_dev,
- 	int err;
- 
- 	/* Check for valid input */
-+
- 	if (!v4l2_dev || !sd || sd->v4l2_dev || !sd->name[0])
- 		return -EINVAL;
- 
 diff --git a/drivers/media/v4l2-core/v4l2-fwnode.c b/drivers/media/v4l2-core/v4l2-fwnode.c
 index 89c7192148df..f22ca76a0d1a 100644
 --- a/drivers/media/v4l2-core/v4l2-fwnode.c
@@ -177,18 +117,6 @@ index 8d748404976b..25bc8bcaf174 100644
  			return NULL;
  
  		return &state->pads[pad].format;
-diff --git a/drivers/of/property.c b/drivers/of/property.c
-index b81168d99033..14e10206c1fa 100644
---- a/drivers/of/property.c
-+++ b/drivers/of/property.c
-@@ -666,6 +666,7 @@ struct device_node *of_graph_get_next_endpoint(const struct device_node *parent,
- 
- 		if (!port) {
- 			pr_err("graph: no port node found in %pOF\n", parent);
-+			WARN_ON(true);
- 			return NULL;
- 		}
- 	} else {
 -- 
 2.43.0
 

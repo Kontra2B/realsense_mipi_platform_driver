@@ -479,7 +479,7 @@ index b363d5f6..8b7f78ae 100644
 +
 +static int max_sdev_unregister(struct max9295 *priv)
 +{
-+	v4l2_async_register_subdev(&priv->sd);
++	v4l2_async_unregister_subdev(&priv->sd);
 +	dev_info(&priv->i2c_client->dev, "%s called\n", __func__);
 +	return 0;
 +}

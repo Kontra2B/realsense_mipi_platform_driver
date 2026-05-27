@@ -195,11 +195,6 @@ char* ds5_sensor_name[] = {
 /* DFU definition section */
 #define DFU_MAGIC_NUMBER "/0x01/0x02/0x03/0x04"
 #define DFU_BLOCK_SIZE			1024
-#ifdef CONFIG_TEGRA_CAMERA_PLATFORM
-#define DFU_I2C_STANDARD_MODE	100000
-#define DFU_I2C_FAST_MODE		400000
-#define DFU_I2C_BUS_CLK_RATE		DFU_I2C_FAST_MODE
-#endif
 #define ds5_read_with_check(state, addr, val) {\
 	if (ds5_read(state, addr, val))	\
 		return -EINVAL; }
@@ -2446,7 +2441,6 @@ static int ds5_s_ctrl(struct v4l2_ctrl *ctrl)
 	int ret = -EINVAL;
 	u16 base = sensor->control_base;
 
-	pr_info("WOJTEK] %s: %s\n", __func__, ctrl->name);
 	dev_dbg(&state->client->dev, "%s - ctrl: %s, value: %d\n",
 		ds5_sensor_name[sensor->id], ctrl->name, ctrl->val);
 
@@ -3527,9 +3521,6 @@ static int ds5_fixed_configuration(struct i2c_client *client, struct ds5 *state)
 		fmt.format.width = yw;
 		fmt.format.height = yh;
 		fmt.format.code = MEDIA_BUS_FMT_UYVY8_2X8;
-#ifdef CONFIG_TEGRA_CAMERA_PLATFORM
-		state->mux.sd.mode_prop_idx = 0;
-#endif
 		ir->streaming = true;
 		epth->streaming = true;
 		ret = __ds5_sensor_set_fmt(state, ir, NULL, &fmt);
@@ -3846,10 +3837,6 @@ static int ds5_dfu_device_open(struct inode *inode, struct file *file)
 {
 	struct ds5 *state = container_of(inode->i_cdev, struct ds5,
 			dfu_dev.ds5_cdev);
-#ifdef CONFIG_TEGRA_CAMERA_PLATFORM
-	struct i2c_adapter *parent = i2c_parent_is_i2c_adapter(
-			state->client->adapter);
-#endif
 	mutex_lock(&state->lock);
 	if (state->dfu_dev.device_open_count) {
 		mutex_unlock(&state->lock);
@@ -3865,24 +3852,6 @@ static int ds5_dfu_device_open(struct inode *inode, struct file *file)
 		return -ENOMEM;
 	}
 	file->private_data = state;
-#ifdef CONFIG_TEGRA_CAMERA_PLATFORM
-	/* get i2c controller and set dfu bus clock rate */
-	while (parent && i2c_parent_is_i2c_adapter(parent))
-		parent = i2c_parent_is_i2c_adapter(state->client->adapter);
-
-	if (!parent) {
-		mutex_unlock(&state->lock);
-		return 0;
-	}
-	dev_dbg(&state->client->dev, "%s: i2c-%d bus_clk = %d, set %d\n",
-			__func__,
-			i2c_adapter_id(parent),
-			i2c_get_adapter_bus_clk_rate(parent),
-			DFU_I2C_BUS_CLK_RATE);
-
-	state->dfu_dev.bus_clk_rate = i2c_get_adapter_bus_clk_rate(parent);
-	i2c_set_adapter_bus_clk_rate(parent, DFU_I2C_BUS_CLK_RATE);
-#endif
 	mutex_unlock(&state->lock);
 	return 0;
 };
@@ -4043,11 +4012,7 @@ static int ds5_hw_init(struct i2c_client *c, struct ds5 *state)
 		dev_dbg(&c->dev, "%s: d: %u lanes, phy %x, data rate %u-%u\n",
 			 __func__, n_lanes, phy, drate_min, drate_max);
 
-#ifdef CONFIG_TEGRA_CAMERA_PLATFORM
-	n_lanes = state->lanes;
-#else
 	n_lanes = 2;
-#endif
 
 	ret = ds5_write(state, DS5_MIPI_LANE_NUMS, n_lanes - 1);
 	if (!ret)
@@ -4055,11 +4020,6 @@ static int ds5_hw_init(struct i2c_client *c, struct ds5 *state)
 
 	if (!ret)
 		ret = ds5_read(state, DS5_MIPI_CONF_STATUS, &mipi_status);
-
-#ifdef CONFIG_TEGRA_CAMERA_PLATFORM
-	dev_dbg(&c->dev, "%s: phandle %x node %pOF status %x\n", __func__,
-		 c->dev.of_node->phandle, c->dev.of_node, mipi_status);
-#endif
 
 	return ret;
 }
@@ -4096,10 +4056,7 @@ static int ds5_v4l_init(struct ds5 *priv)
 static int ds5_dfu_device_release(struct inode *inode, struct file *file)
 {
 	struct ds5 *state = container_of(inode->i_cdev, struct ds5, dfu_dev.ds5_cdev);
-#ifdef CONFIG_TEGRA_CAMERA_PLATFORM
-	struct i2c_adapter *parent = i2c_parent_is_i2c_adapter(
-			state->client->adapter);
-#endif
+
 	int ret = 0, retry = 10;
 	mutex_lock(&state->lock);
 	state->dfu_dev.device_open_count--;
@@ -4114,21 +4071,6 @@ static int ds5_dfu_device_release(struct inode *inode, struct file *file)
 	if (state->dfu_dev.dfu_msg)
 		devm_kfree(&state->client->dev, state->dfu_dev.dfu_msg);
 	state->dfu_dev.dfu_msg = NULL;
-#ifdef CONFIG_TEGRA_CAMERA_PLATFORM
-	/* get i2c controller and restore bus clock rate */
-	while (parent && i2c_parent_is_i2c_adapter(parent))
-		parent = i2c_parent_is_i2c_adapter(state->client->adapter);
-	if (!parent) {
-		mutex_unlock(&state->lock);
-		return 0;
-	}
-	dev_dbg(&state->client->dev, "%s: i2c-%d bus_clk %d, restore to %d\n",
-			__func__, i2c_adapter_id(parent),
-			i2c_get_adapter_bus_clk_rate(parent),
-			state->dfu_dev.bus_clk_rate);
-
-	i2c_set_adapter_bus_clk_rate(parent, state->dfu_dev.bus_clk_rate);
-#endif
 	/* Verify communication */
 	do {
 		ret = ds5_read(state, DS5_FW_VERSION, &state->fw_version);

@@ -19,11 +19,10 @@ diff --git a/drivers/media/i2c/Makefile b/drivers/media/i2c/Makefile
 index 3b3a3c14..b30f4219 100644
 --- a/drivers/media/i2c/Makefile
 +++ b/drivers/media/i2c/Makefile
-@@ -17,6 +17,8 @@ subdir-ccflags-y += -Werror
+@@ -17,6 +17,7 @@ subdir-ccflags-y += -Werror
  ifneq ($(NV_BUILD_SYSTEM_TYPE),embedded-linux)
  obj-m += max9295.o
  obj-m += max9296.o
-+subdir-ccflags-y += -DCONFIG_TEGRA_CAMERA_PLATFORM
 +obj-m += d4xx.o
  ifndef CONFIG_TEGRA_SYSTEM_TYPE_ACK
  obj-m += max96712.o
@@ -1849,7 +1848,7 @@ index 08f2424a..5aa9c861 100644
  	priv->reset_gpio = of_get_named_gpio(node, "reset-gpios", 0);
  	if (priv->reset_gpio < 0) {
  		dev_err(&client->dev, "reset-gpios not found %d\n", err);
-@@ -1066,6 +835,25 @@ static struct regmap_config max9296_regmap_config = {
+@@ -1066,6 +835,26 @@ static struct regmap_config max9296_regmap_config = {
  	.cache_type = REGCACHE_RBTREE,
  };
  
@@ -1865,6 +1864,7 @@ index 08f2424a..5aa9c861 100644
 +	pad->flags = MEDIA_PAD_FL_SINK;
 +	media_entity_pads_init(entity, MAX9296_MAX_PIPES + 1, pad);
 +	v4l2_i2c_subdev_init(&priv->sd, priv->i2c_client, &max_ops);
++	v4l2_set_subdevdata(&priv->sd, priv);
 +	entity->obj_type = MEDIA_ENTITY_TYPE_V4L2_SUBDEV;
 +	entity->function = MEDIA_ENT_F_VID_MUX;
 +	priv->sd.owner = THIS_MODULE;
@@ -2065,15 +2065,13 @@ index b8dc69b6..55da0664 100644
  	for_each_child_of_node(node, chan_dt) {
  		if (!chan_dt->name || of_node_cmp(chan_dt->name, "channel"))
  			continue;
-@@ -987,6 +987,7 @@ static int tegra_csi_channel_init_one(struct tegra_csi_channel *chan)
- 			GFP_KERNEL);
- 		if (!chan->pads)
+@@ -989,12 +989,13 @@ static int tegra_csi_channel_init_one(struct tegra_csi_channel *chan)
  			return -ENOMEM;
-+		media_entity_pads_init(&sd->entity, 2, chan->pads);
  		chan->pads[0].flags = MEDIA_PAD_FL_SINK;
  		chan->pads[1].flags = MEDIA_PAD_FL_SOURCE;
++		media_entity_pads_init(&sd->entity, 2, chan->pads);
  	}
-@@ -994,7 +995,7 @@ static int tegra_csi_channel_init_one(struct tegra_csi_channel *chan)
+ 	ret = snprintf(sd->name, sizeof(sd->name), "%s-%d",
  			 chan->pg_mode ? "tpg" :
  			 (strlen(csi->devname) == 0 ?
  			  dev_name(csi->dev) : csi->devname),
@@ -2221,7 +2219,7 @@ index da4a1c71..df424c2a 100644
 -			video_unregister_device(it->video);
 -	}
 +	it = vi->channel;
-+	if (it->video->cdev != NULL)
++	if (it->video->cdev)
 +		video_unregister_device(it->video);
  }
  EXPORT_SYMBOL(tegra_vi_channels_unregister);
@@ -2785,7 +2783,7 @@ index 8e2a600f..3d008cc9 100644
  		list_for_each_entry(entity, &chan->entities, list) {
 -			struct v4l2_async_connection *asc;
 -			asc = v4l2_async_nf_add_fwnode(&chan->notifier, of_fwnode_handle(entity->node),
-+			asc = v4l2_async_nf_add_fwnode(&chan->notifier, of_fwnode_handle(entity->node), 
++			asc = v4l2_async_nf_add_fwnode(&chan->notifier, of_fwnode_handle(entity->node),
  					struct v4l2_async_connection);
 -			if (IS_ERR(asc))
 +			if (IS_ERR(asc)) {
